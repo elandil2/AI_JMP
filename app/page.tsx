@@ -19,34 +19,50 @@ export default function LandingPage() {
     e.preventDefault();
     setLoading(true);
     setError(null);
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
-    if (error) {
-      setError(error.message);
-    } else if (data.user) {
-      // Check if user exists in profile
-      const user = data.user;
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('id', user.id)
-        .single();
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
-      if (!profile) {
-        // Create profile if not exists
-        await supabase.from('profiles').insert({
-          id: user.id,
-          email: user.email,
-          name: user.user_metadata?.full_name || user.email?.split('@')[0],
-          created_at: new Date().toISOString(),
-          is_admin: false
-        });
+      if (error) {
+        setError(error.message);
+        setLoading(false);
+        return;
       }
 
-      router.refresh();
-      router.push("/dashboard");
+      if (data.user) {
+        // Check if user exists in profile
+        const user = data.user;
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('id, is_blocked')
+          .eq('id', user.id)
+          .single();
+
+        if (!profile) {
+          // Create profile if not exists
+          await supabase.from('profiles').insert({
+            id: user.id,
+            email: user.email,
+            name: user.user_metadata?.full_name || user.email?.split('@')[0],
+            created_at: new Date().toISOString(),
+            is_admin: false
+          });
+        }
+
+        // Verify session is set before redirecting
+        const { data: sessionData } = await supabase.auth.getSession();
+        if (sessionData.session) {
+          // Use hard navigation to ensure cookies are set and middleware processes the redirect
+          window.location.href = "/dashboard";
+        } else {
+          setError("Session creation failed. Please try again.");
+          setLoading(false);
+        }
+      }
+    } catch (err: any) {
+      setError(err?.message || "An error occurred during login");
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (
