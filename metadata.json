@@ -1,0 +1,7 @@
+{
+  "name": "Logistics Route Analyst",
+  "description": "AI-powered route risk analysis and safety briefing for truck drivers using Google Maps data.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
