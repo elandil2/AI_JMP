@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 import { getSupabaseBrowserClient } from "@/lib/supabaseClient";
 
 export default function ResetPasswordPage() {
@@ -19,7 +20,7 @@ export default function ResetPasswordPage() {
 
     useEffect(() => {
         // We can listen to auth state changes to detect if the session is established from the recovery link
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event: AuthChangeEvent, _session: Session | null) => {
             if (event === "PASSWORD_RECOVERY") {
                 // User is signed in via recovery link
                 // We are good to go
