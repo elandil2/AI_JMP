@@ -63,18 +63,19 @@ export interface RouteAnalysis {
 export interface CriticalPoint {
   id: string;
   coordinate: string; // lat,lng
+  timeOffsetHours?: number; // Estimated hours from start to reach this point
   weather: WeatherInfo;
   traffic: {
     status: 'fluid' | 'moderate' | 'heavy' | 'stopped';
     description: string;
     tollInfo?: string;
-    incident: {
-      type: 'accident' | 'roadwork' | 'none';
-      description: string;
-      source?: string;
-    };
-    timeOffsetHours?: number; // Estimated hours from start to reach this point
-  }
+  };
+  incident: {
+    type: 'accident' | 'roadwork' | 'none';
+    description: string;
+    source?: string;
+  };
+}
 
 export interface RouteSegmentNode {
   name: string;

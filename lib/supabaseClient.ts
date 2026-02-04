@@ -9,6 +9,10 @@ export const getSupabaseBrowserClient = () => {
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   if (!url || !anonKey) {
+    if (typeof window === "undefined") {
+      // Allow build to pass without env vars
+      return createBrowserClient(url || "https://example.supabase.co", anonKey || "example");
+    }
     throw new Error("Supabase URL or anon key is missing. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.");
   }
 
