@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { getSupabaseBrowserClient } from "@/lib/supabaseClient";
-import { AuthChangeEvent, Session } from '@supabase/supabase-js';
 
 export default function ResetPasswordPage() {
     const supabase = getSupabaseBrowserClient();
