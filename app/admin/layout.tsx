@@ -14,7 +14,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
                 getAll() {
                     return cookieStore.getAll();
                 },
-                setAll(cookiesToSet) {
+                setAll(cookiesToSet: Array<{ name: string; value: string; options?: any }>) {
                     // Cannot set cookies in Server Component, middleware handles session maintenance
                 },
             },

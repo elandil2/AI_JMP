@@ -22,7 +22,7 @@ export async function PATCH(
         {
             cookies: {
                 getAll() { return cookieStore.getAll(); },
-                setAll(cookiesToSet) { },
+                setAll(cookiesToSet: Array<{ name: string; value: string; options?: any }>) { },
             },
         }
     );

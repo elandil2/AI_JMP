@@ -2,10 +2,8 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 export async function middleware(request: NextRequest) {
-    let response = NextResponse.next({
-        request: {
-            headers: request.headers,
-        },
+    let supabaseResponse = NextResponse.next({
+        request,
     });
 
     const supabase = createServerClient(
@@ -17,17 +15,13 @@ export async function middleware(request: NextRequest) {
                     return request.cookies.getAll();
                 },
                 setAll(cookiesToSet) {
-                    cookiesToSet.forEach(({ name, value, options }) => {
-                        request.cookies.set(name, value);
+                    cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
+                    supabaseResponse = NextResponse.next({
+                        request,
                     });
-                    response = NextResponse.next({
-                        request: {
-                            headers: request.headers,
-                        },
-                    });
-                    cookiesToSet.forEach(({ name, value, options }) => {
-                        response.cookies.set(name, value, options);
-                    });
+                    cookiesToSet.forEach(({ name, value, options }) =>
+                        supabaseResponse.cookies.set(name, value, options)
+                    );
                 },
             },
         }
@@ -70,7 +64,8 @@ export async function middleware(request: NextRequest) {
     // Specific API routes that should be public
     const publicApiPaths = [
         "/api/check-email",
-        "/api/auth" // allow auth related apis if any
+        "/api/auth",
+        "/api/public"
     ];
 
     // Check if current path is public
@@ -91,16 +86,14 @@ export async function middleware(request: NextRequest) {
     }
 
     // If user IS logged in and tries to access public auth pages (like login), 
-    // redirect them to dashboard?
-    // User didn't explicitly ask for this, but it's good UX.
-    // If user is explicitly on /, /login, /forgot-password while logged in:
+    // redirect them to dashboard
     if (user && (path === "/" || path === "/login" || path === "/forgot-password")) {
         const url = request.nextUrl.clone();
         url.pathname = "/dashboard";
         return NextResponse.redirect(url);
     }
 
-    return response;
+    return supabaseResponse;
 }
 
 export const config = {

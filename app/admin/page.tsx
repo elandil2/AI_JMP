@@ -16,7 +16,7 @@ export default async function AdminPage() {
                 getAll() {
                     return cookieStore.getAll();
                 },
-                setAll(cookiesToSet) { },
+                setAll(cookiesToSet: Array<{ name: string; value: string; options?: any }>) { },
             },
         }
     );
