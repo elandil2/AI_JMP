@@ -24,7 +24,7 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: error?.message || "Failed to fetch reports" }, { status: 500 });
     }
 
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://surus-guvenji.vercel.app";
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://jmpai-snowy.vercel.app";
 
     // CSV Generation
     // Requested Format: Rota, Durum, Tarih, Link
