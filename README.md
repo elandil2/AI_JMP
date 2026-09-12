@@ -35,14 +35,14 @@ Create a local env file such as `.env.local` and add the values below.
 NEXT_PUBLIC_SUPABASE_URL="https://your-project.supabase.co"
 NEXT_PUBLIC_SUPABASE_ANON_KEY="your-supabase-anon-key"
 SUPABASE_SERVICE_ROLE_KEY="your-supabase-service-role-key"
-API_KEY="your-gemini-api-key"
+GEMINI_API_KEY="your-gemini-api-key"
 MAPBOX_TOKEN=""
 NEXT_PUBLIC_APP_URL="http://localhost:3000"
 ```
 
 Notes:
 
-- `API_KEY` is the Gemini key used by `services/geminiService.ts`.
+- `GEMINI_API_KEY` is the Gemini key used by `services/geminiService.ts` (`API_KEY` is accepted for older installations).
 - `SUPABASE_SERVICE_ROLE_KEY` is required for server-side operations such as the keep-alive route and should never be exposed in the browser.
 - `NEXT_PUBLIC_APP_URL` is used when generating share links for reports.
 - `MAPBOX_TOKEN` is optional.

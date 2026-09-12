@@ -233,7 +233,11 @@ export const analyzeRoute = async (
   destCoords?: string,
   options?: RouteOptions
 ): Promise<RouteAnalysis> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
+  if (!apiKey) {
+    throw new Error("Gemini API key is not configured (GEMINI_API_KEY).");
+  }
+  const ai = new GoogleGenAI({ apiKey });
 
   try {
     // 1. Calculate basics (Distance, Duration, Route Line)
