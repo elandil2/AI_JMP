@@ -26,7 +26,19 @@ Google Directions `mode=driving` is not a truck-restriction-aware route. The exi
 - TypeScript check and production build pass. Build retains a Supabase Edge-runtime warning.
 - Dependency audit after updates: zero known vulnerabilities reported at the time of this check.
 - Standalone lint remains unconfigured: `npm run lint` opens the existing setup prompt and does not constitute a successful lint run.
-- Independent Terra high-reasoning review: PASS, no confirmed P0/P1 blockers; 17/17 tests and typecheck independently rerun. Final production build also passed after the last edits. Live smoke remains pending at commit time.
+- Independent Terra high-reasoning review: PASS, no confirmed P0/P1 blockers; 17/17 tests and typecheck independently rerun. Final production build also passed after the last edits.
+
+## Verified production smoke
+
+- Repair commit: `56a6a4e`; Vercel deployment `2ZTeH4gFU6K52fV2bTxoRSZYcgD6`, Ready and assigned to `jmpai-snowy.vercel.app`.
+- Exactly one new single report, Gemini 2.5 Flash, Bursa/Nilüfer → Ankara/Etimesgut, tolls allowed, current departure. Report `7fefa1cc-5b10-48b5-996e-72129a1b2994`, https://jmpai-snowy.vercel.app/r/bibj8philj . No automatic retry or benchmark batch.
+- Database status ready; created 2026-09-14 19:16:57 UTC, completed 19:18:04 UTC (about 67 seconds).
+- Maps directions: successful, 374 ms. Gemini critical analysis: successful, 38,534 ms. Gemini weather: successful, 25,100 ms. All three usage events persisted.
+- Summary and schematic agree: 379 km, Maps automobile 4h21, truck-planning driving 6h19 + rest 45m = total 7h04. Embedded Maps visibly showed the same 379 km / 4h21 route during this check (other alternatives were also visible).
+- Estimated list-price costs: tokens USD 0.034918, Search USD 0.070000, Maps USD 0.010000; total USD 0.114918. This is an estimate, not an invoice; account free allowances and actual billed Search usage may differ.
+- Critical response returned 14 grounding sources; weather response returned zero grounding sources. A structurally valid weather answer is not independently verified weather truth. No claim is made that every generated risk, restriction, or forecast was fact-checked.
+- Public report renders successfully, source links visible, old failed report now shows a clear failure message. Desktop and 320px mobile report inspected; mobile document width equals viewport width (312 CSS px after scrollbar), no horizontal page overflow. Temporary viewport override reset.
+- Existing historical reports were preserved; the 29-report local compatibility corpus was not committed.
 
 ## Deliberately not completed here
 
