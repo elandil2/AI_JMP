@@ -3,6 +3,9 @@
  * Direct API calls for accurate route data
  */
 
+import type { GenerationEvent } from '../types';
+import { estimatedDirectionsCost } from './usageCost';
+
 export interface DirectionsResult {
   distance: {
     text: string;      // "1,534 km"
@@ -36,7 +39,12 @@ export interface DirectionsOptions {
   stopCoords?: string;    // "lat,lng" for waypoint
   departureTime?: Date;
   mode?: 'driving' | 'walking' | 'bicycling' | 'transit';
+  onUsage?: (event: GenerationEvent) => Promise<void> | void;
 }
+
+const emitUsage = async (callback: DirectionsOptions['onUsage'], event: GenerationEvent) => {
+  if (callback) await callback(event);
+};
 
 /**
  * Calls Google Maps Directions API with coordinates
@@ -50,6 +58,11 @@ export async function getDirections(
 
   if (!apiKey) {
     console.warn("GOOGLE_MAPS_API_KEY not set - falling back to Gemini estimation");
+    await emitUsage(options.onUsage, {
+      provider: 'maps', stage: 'directions', model: 'directions', outcome: 'error', durationMs: 0,
+      estimatedCost: { currency: 'USD', pricingVersion: 'No Maps request', directionsUsd: 0, totalUsd: 0 },
+      mapsCostUsd: 0, routeSource: 'unavailable', errorCode: 'maps_key_missing', error: 'GOOGLE_MAPS_API_KEY is not configured.'
+    });
     return null;
   }
 
@@ -82,55 +95,47 @@ export async function getDirections(
     params.set("departure_time", Math.floor(depTime / 1000).toString());
   }
 
+  const startedAt = Date.now();
+  let result: DirectionsResult | null = null;
+  let failure: string | undefined;
+  let failureCode: string | undefined;
   try {
     const response = await fetch(`${baseUrl}?${params.toString()}`);
-    const data = await response.json();
+    const data: unknown = await response.json();
 
-    if (data.status !== "OK") {
-      console.error("Google Maps API error:", data.status, data.error_message);
-      return null;
+    if (typeof data !== 'object' || data === null || (data as { status?: unknown }).status !== "OK") {
+      const status = typeof data === 'object' && data !== null && typeof (data as { status?: unknown }).status === 'string'
+        ? (data as { status: string }).status
+        : 'invalid response';
+      console.error("Google Maps API error:", status);
+      failure = `Directions request failed: ${status}`;
+      failureCode = status;
+    } else {
+      const route = (data as { routes?: any[] }).routes?.[0];
+      if (!route?.legs?.[0]) throw new Error('Directions response did not contain a route leg.');
+      const leg = route.legs[0];
+      const steps: DirectionStep[] = leg.steps.map((step: any) => ({
+        instruction: step.html_instructions?.replace(/<[^>]*>/g, "") || "", distance: step.distance?.text || "", duration: step.duration?.text || "", maneuver: step.maneuver
+      }));
+      result = {
+        distance: { text: leg.distance.text, value: leg.distance.value }, duration: { text: leg.duration.text, value: leg.duration.value },
+        durationInTraffic: leg.duration_in_traffic ? { text: leg.duration_in_traffic.text, value: leg.duration_in_traffic.value } : undefined,
+        startAddress: leg.start_address, endAddress: leg.end_address, summary: route.summary || "", steps, polyline: route.overview_polyline?.points || "", warnings: route.warnings || []
+      };
+      console.log(`Google Maps API: Distance = ${result.distance.text}, Duration = ${result.duration.text}`);
     }
-
-    const route = data.routes[0];
-    const leg = route.legs[0];
-
-    // Parse steps for detailed directions
-    const steps: DirectionStep[] = leg.steps.map((step: any) => ({
-      instruction: step.html_instructions?.replace(/<[^>]*>/g, "") || "",
-      distance: step.distance?.text || "",
-      duration: step.duration?.text || "",
-      maneuver: step.maneuver,
-    }));
-
-    const result: DirectionsResult = {
-      distance: {
-        text: leg.distance.text,
-        value: leg.distance.value,
-      },
-      duration: {
-        text: leg.duration.text,
-        value: leg.duration.value,
-      },
-      durationInTraffic: leg.duration_in_traffic ? {
-        text: leg.duration_in_traffic.text,
-        value: leg.duration_in_traffic.value,
-      } : undefined,
-      startAddress: leg.start_address,
-      endAddress: leg.end_address,
-      summary: route.summary || "",
-      steps,
-      polyline: route.overview_polyline?.points || "",
-      warnings: route.warnings || [],
-    };
-
-    console.log(`Google Maps API: Distance = ${result.distance.text}, Duration = ${result.duration.text}`);
-
-    return result;
 
   } catch (error) {
     console.error("Failed to call Google Maps Directions API:", error);
-    return null;
+    failure = error instanceof Error ? error.message : 'Directions request failed.';
+    failureCode = 'maps_request_error';
   }
+  // Deliberately outside the request try/catch: telemetry persistence failure is never hidden or retried.
+  await emitUsage(options.onUsage, {
+    provider: 'maps', stage: 'directions', model: 'directions', outcome: result ? 'success' : 'error', durationMs: Date.now() - startedAt,
+    estimatedCost: estimatedDirectionsCost(), mapsCostUsd: 0.005, routeSource: result ? 'maps' : 'unavailable', errorCode: failureCode, error: failure
+  });
+  return result;
 }
 
 /**

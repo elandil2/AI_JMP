@@ -1,119 +1,142 @@
+import { GoogleGenAI } from '@google/genai';
+import type { CriticalPoint, GenerationEvent, GenerationTokens, GroundingChunk, RouteAnalysis, RouteOptions } from '../types';
+import { calculateBreaks, calculateTruckDuration, getDirections, type DirectionsResult } from '../lib/googleMaps';
+import { resolveGeminiModel, type GeminiModel } from '../lib/aiModels';
+import { parseJsonResponse, validateCriticalAnalysis, validateRouteFallback, validateWeatherResults } from '../lib/analysisValidation';
+import { estimateGeminiUsageCost } from '../lib/usageCost';
 
-import { GoogleGenAI } from "@google/genai";
-import {
-  RouteAnalysis,
-  RouteOptions,
-  WeatherInfo,
-  RiskSegment,
-  TimelineEvent,
-  CriticalPoint,
-  RouteSchematic,
-  RouteSegmentNode
-} from "../types";
-import { getDirections, calculateTruckDuration, calculateBreaks, DirectionsResult } from "../lib/googleMaps";
+type Stage = Extract<GenerationEvent['stage'], 'route' | 'critical' | 'weather'>;
+type UnknownRecord = Record<string, unknown>;
+export type GeminiClient = Pick<GoogleGenAI, 'models'>;
 
-// Helper to safely parse JSON
-const parseJSONResponse = (text: string | undefined): any => {
-  if (!text) return {};
-  try {
-    const jsonBlockMatch = text.match(/```json\s*([\s\S]*?)\s*```/);
-    if (jsonBlockMatch && jsonBlockMatch[1]) return JSON.parse(jsonBlockMatch[1]);
-    const firstBrace = text.indexOf('{');
-    const lastBrace = text.lastIndexOf('}');
-    if (firstBrace !== -1 && lastBrace !== -1) {
-      return JSON.parse(text.substring(firstBrace, lastBrace + 1));
-    }
-    return JSON.parse(text);
-  } catch (e) {
-    console.error("Failed to parse JSON response:", text);
-    return {};
-  }
+const defaultGeminiClientFactory = (apiKey: string): GeminiClient => new GoogleGenAI({ apiKey });
+let geminiClientFactory: (apiKey: string) => GeminiClient = defaultGeminiClientFactory;
+
+/** Test-only seam. Pass no argument in cleanup to restore the production client factory. */
+export const setGeminiClientFactoryForTests = (factory?: (apiKey: string) => GeminiClient) => {
+  geminiClientFactory = factory ?? defaultGeminiClientFactory;
 };
 
-const generateWithRetry = async (ai: GoogleGenAI, params: any, retries = 3) => {
-  for (let i = 0; i < retries; i++) {
-    try {
-      return await ai.models.generateContent(params);
-    } catch (error: any) {
-      if (i === retries - 1) throw error;
-      const status = error.status || error.response?.status || 0;
-      if (status === 500 || status === 503 || error.code === 500) {
-        await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, i)));
-        continue;
-      }
-      throw error;
+const asRecord = (value: unknown): UnknownRecord | undefined =>
+  typeof value === 'object' && value !== null && !Array.isArray(value) ? value as UnknownRecord : undefined;
+
+const asNumber = (value: unknown) => typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+
+const sanitizeGroundingChunks = (value: unknown): GroundingChunk[] => {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap(item => {
+    const chunk = asRecord(item);
+    const web = asRecord(chunk?.web);
+    const maps = asRecord(chunk?.maps);
+    const safe: GroundingChunk = {};
+    if (web && (typeof web.uri === 'string' || typeof web.title === 'string')) {
+      safe.web = { uri: typeof web.uri === 'string' ? web.uri : undefined, title: typeof web.title === 'string' ? web.title : undefined };
     }
-  }
-  throw new Error("API failed");
-};
-
-// --- HELPER: Identify Waypoints from Google Maps Data ---
-const identifyWaypoints = (mapsData: DirectionsResult, origin: string, destination: string) => {
-  const waypoints: { name: string; coords: string; timeOffsetHours: number; type: 'stop' | 'break' }[] = [];
-
-  // Logic: Find a point roughly every 4 hours for breaks
-  const totalDurationSeconds = mapsData.duration.value;
-  const totalSteps = mapsData.steps.length;
-
-  // Need a break around 4.5 hours = 16200 seconds
-  const BREAK_INTERVAL = 16200;
-  let currentDuration = 0;
-  let nextBreakTarget = BREAK_INTERVAL;
-
-  mapsData.steps.forEach((step) => {
-    // Basic duration parsing (text to seconds approximation if needed, but Maps provides values usually)
-    // Here we rely on the fact that we might need to accumulate manually or just pick representative cities.
-    // For simplicity, we'll pick 1-2 key locations from the summary steps if available, 
-    // or just rely on the start/end of major segments.
-
-    // NOTE: mapsData.steps from our lib is simplified. 
-    // Real implementation: We'd need accurate cumulative time. 
-    // Let's assume we pick the middle styling for now or just standard intervals.
+    if (maps && (typeof maps.uri === 'string' || typeof maps.title === 'string' || typeof maps.placeId === 'string')) {
+      safe.maps = { uri: typeof maps.uri === 'string' ? maps.uri : undefined, title: typeof maps.title === 'string' ? maps.title : undefined, placeId: typeof maps.placeId === 'string' ? maps.placeId : undefined };
+    }
+    return safe.web || safe.maps ? [safe] : [];
   });
-
-  // FALLBACK: Just pick 2 calculated points if route is long enough (> 500km)
-  // For the demo/prototype, we will trust Gemini to identify "reasonable" stopping cities based on the path description
-  // OR we pass the specific polyline/latlng if we had it.
-
-  return waypoints;
 };
 
-// --- AGENT 1: ROUTE SPECIALIST (Modified) ---
-const routeAgent = async (
-  ai: GoogleGenAI,
-  origin: string,
-  destination: string,
-  originCoords?: string,
-  destCoords?: string,
+const dedupeGroundingChunks = (chunks: GroundingChunk[]) => {
+  const seen = new Set<string>();
+  return chunks.filter(chunk => {
+    const key = JSON.stringify(chunk);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+};
+
+const usageFromResponse = (response: unknown) => {
+  const root = asRecord(response);
+  const usage = asRecord(root?.usageMetadata);
+  const candidates = Array.isArray(root?.candidates) ? root.candidates : [];
+  const groundingMetadata = asRecord(asRecord(candidates[0])?.groundingMetadata);
+  const tokens: GenerationTokens = {
+    prompt: asNumber(usage?.promptTokenCount),
+    candidate: asNumber(usage?.candidatesTokenCount),
+    thoughts: asNumber(usage?.thoughtsTokenCount),
+    cached: asNumber(usage?.cachedContentTokenCount),
+    toolUse: asNumber(usage?.toolUsePromptTokenCount),
+    total: asNumber(usage?.totalTokenCount)
+  };
+  const hasTokens = Object.values(tokens).some(value => value !== undefined);
+  return {
+    tokens: hasTokens ? tokens : undefined,
+    searchQueryCount: Array.isArray(groundingMetadata?.webSearchQueries) ? groundingMetadata.webSearchQueries.filter(query => typeof query === 'string').length : 0,
+    sourceCount: Array.isArray(groundingMetadata?.groundingChunks) ? groundingMetadata.groundingChunks.length : 0,
+    sources: sanitizeGroundingChunks(groundingMetadata?.groundingChunks)
+  };
+};
+
+const emitUsage = async (callback: RouteOptions['onUsage'] | undefined, event: GenerationEvent) => {
+  if (callback) await callback(event);
+};
+
+const geminiEvent = (
+  stage: Stage,
+  model: GeminiModel,
+  outcome: GenerationEvent['outcome'],
+  durationMs: number,
+  usage?: ReturnType<typeof usageFromResponse>,
+  error?: string
+): GenerationEvent => {
+  const estimatedCost = estimateGeminiUsageCost({
+    model,
+    tokens: usage?.tokens,
+    groundedPromptCount: stage === 'route' ? 0 : 1,
+    searchQueryCount: usage?.searchQueryCount ?? 0
+  });
+  return {
+    provider: 'gemini', stage, model, outcome, durationMs, tokens: usage?.tokens,
+    searchQueryCount: usage?.searchQueryCount ?? 0, sourceCount: usage?.sourceCount ?? 0, estimatedCost,
+    routeSource: stage === 'route' ? 'gemini_fallback' : undefined, error,
+    promptTokens: usage?.tokens?.prompt, candidateTokens: usage?.tokens?.candidate,
+    thoughtsTokens: usage?.tokens?.thoughts, cachedTokens: usage?.tokens?.cached,
+    toolPromptTokens: usage?.tokens?.toolUse, tokenCostUsd: estimatedCost.tokenUsd,
+    searchCostUsd: estimatedCost.searchUsd, mapsCostUsd: null
+  };
+};
+
+const generateWithTelemetry = async (
+  ai: GeminiClient,
+  params: Parameters<GoogleGenAI['models']['generateContent']>[0],
+  stage: Stage,
+  model: GeminiModel,
   options?: RouteOptions
 ) => {
+  const startedAt = Date.now();
+  let response;
+  try {
+    response = await ai.models.generateContent(params);
+  } catch (error) {
+    await emitUsage(options?.onUsage, geminiEvent(stage, model, 'error', Date.now() - startedAt, undefined, error instanceof Error ? error.message : 'Gemini request failed.'));
+    throw error;
+  }
+  // Deliberately outside the API try/catch: a durable telemetry failure must not retry a paid call.
+  const usage = usageFromResponse(response);
+  await emitUsage(options?.onUsage, geminiEvent(stage, model, 'success', Date.now() - startedAt, usage));
+  return response;
+};
+
+const routeAgent = async (ai: GeminiClient, model: GeminiModel, origin: string, destination: string, originCoords?: string, destCoords?: string, options?: RouteOptions) => {
   let mapsData: DirectionsResult | null = null;
   if (originCoords && destCoords) {
     mapsData = await getDirections(originCoords, destCoords, {
-      useTolls: options?.useTolls,
-      stopCoords: options?.stopCoords,
-      departureTime: options?.departureTime ? new Date(options.departureTime) : undefined
+      useTolls: options?.useTolls, stopCoords: options?.stopCoords,
+      departureTime: options?.departureTime ? new Date(options.departureTime) : undefined, onUsage: options?.onUsage
     });
   }
-
   if (mapsData) {
     const distanceKm = mapsData.distance.value / 1000;
     const truckDuration = calculateTruckDuration(mapsData.distance.value);
     const breaks = calculateBreaks(truckDuration.hours);
-    const totalHours = truckDuration.hours + (breaks.totalBreakMinutes / 60);
-    const totalHoursInt = Math.floor(totalHours);
-    const totalMinutes = Math.round((totalHours - totalHoursInt) * 60);
-
-    return {
-      totalDistance: `${distanceKm.toFixed(0)} km`,
-      estimatedDuration: `${totalHoursInt} sa ${totalMinutes} dk`,
-      routeDescription: `${origin} → ${destination}. Güzergah: ${mapsData.summary}`,
-      estimatedArrivalHours: totalHours,
-      mapsData
-    };
+    const totalHours = truckDuration.hours + breaks.totalBreakMinutes / 60;
+    const hours = Math.floor(totalHours);
+    return { totalDistance: `${distanceKm.toFixed(0)} km`, estimatedDuration: `${hours} sa ${Math.round((totalHours - hours) * 60)} dk`, routeDescription: `${origin} → ${destination}. Güzergah: ${mapsData.summary}`, estimatedArrivalHours: totalHours };
   }
-
-  // Fallback to Gemini
   const prompt = `
     GÖREV: Tır Rota Hesabı.
     NEREDEN: ${origin}
@@ -121,227 +144,65 @@ const routeAgent = async (
     TERCİHLER: ${options?.useTolls ? 'Ücretli yollar OK' : 'Ücretsiz yol'}
     ÇIKTI: JSON { "totalDistance": "km", "estimatedDuration": "sa dk", "routeDescription": "özet", "estimatedArrivalHours": number }
   `;
-
-  const response = await generateWithRetry(ai, { model: "gemini-2.5-flash", contents: prompt });
-  return parseJSONResponse(response.text);
+  const response = await generateWithTelemetry(ai, { model, contents: prompt }, 'route', model, options);
+  return validateRouteFallback(parseJsonResponse(response.text));
 };
 
-// --- AGENT 2: WEATHER SPECIALIST (Enhanced) ---
-const weatherAgent = async (
-  ai: GoogleGenAI,
-  locations: { name: string; role: 'origin' | 'destination' | 'waypoint'; timeOffset: number }[]
-) => {
-  // Current Time
+const weatherAgent = async (ai: GeminiClient, model: GeminiModel, locations: { name: string; role: 'origin' | 'destination' | 'waypoint'; timeOffset: number }[], options?: RouteOptions) => {
   const now = new Date();
-
-  const weatherRequests = locations.map(loc => {
-    const targetTime = new Date(now.getTime() + loc.timeOffset * 60 * 60 * 1000);
-    const timeStr = targetTime.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
-    return `${loc.name} (${loc.role === 'origin' ? 'ŞİMDİ' : 'Saat ' + timeStr})`;
+  const weatherRequests = locations.map(location => {
+    const time = new Date(now.getTime() + location.timeOffset * 60 * 60 * 1000).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+    return `${location.name} (${location.role === 'origin' ? 'ŞİMDİ' : `Saat ${time}`})`;
   }).join(', ');
-
   const prompt = `
     GÖREV: Aşağıdaki konumlar ve saatler için hava durumu tahmini yap.
     KONUMLAR: ${weatherRequests}
-    
     ARAÇ: Google Search kullanarak anlık/tahmini hava durumunu bul.
-    
-    JSON FORMATI (Array):
-    [
-      { "location": "Şehir Adı", "temp": "15°C", "condition": "Yağmurlu", "icon": "rainy" }
-    ]
+    JSON FORMATI (Array): [ { "location": "Şehir Adı", "temp": "15°C", "condition": "Yağmurlu", "icon": "rainy" } ]
     * icon seçenekleri: sunny, cloudy, rainy, storm, snow, fog.
   `;
-
-  const response = await generateWithRetry(ai, {
-    model: "gemini-2.5-flash",
-    contents: prompt,
-    config: { tools: [{ googleSearch: {} }] }
-  });
-
-  return parseJSONResponse(response.text);
+  const response = await generateWithTelemetry(ai, { model, contents: prompt, config: { tools: [{ googleSearch: {} }] } }, 'weather', model, options);
+  return { data: validateWeatherResults(parseJsonResponse(response.text)), sources: usageFromResponse(response).sources };
 };
 
-// --- AGENT 3: CRITICAL ANALYST (New) ---
-const criticalAnalysisAgent = async (
-  ai: GoogleGenAI,
-  routeDesc: string,
-  origin: string,
-  destination: string,
-  durationHours: number
-) => {
+const criticalAnalysisAgent = async (ai: GeminiClient, model: GeminiModel, routeDescription: string, origin: string, destination: string, durationHours: number, options?: RouteOptions) => {
   const prompt = `
     GÖREV: Tır rotası için Kapsamlı Risk ve Kritik Nokta Analizi.
     ROTA: ${origin} -> ${destination}
-    GÜZERGAH DETAYI: ${routeDesc}
+    GÜZERGAH DETAYI: ${routeDescription}
     SÜRE: ${durationHours.toFixed(1)} saat
-    
     EK KAYNAKLAR: https://yol.kgm.gov.tr/KazaKaraNoktaWeb/ (Kaza Kara Noktaları) verisine benzer verileri ara.
-
     ARAÇLAR: Google Search ile trafik, yol çalışmaları, kaza kara noktaları ve hava durumu uyarılarını ara.
-
-    İSTENEN ÇIKTILAR (JSON):
-    1. riskIntensity: Güzergah üzerindeki illerin/bölgelerin risk puanı (0-100).
-    2. timeline: Yolculuk adımları (Başlangıç, Kritik Nokta, Mola, Varış).
-    3. criticalPoints: Tablo formatı için detaylı noktalar. **HER NOKTA İÇİN TAHMİNİ VARIŞ SÜRESİNİ (timeOffsetHours) HESAPLA.**
-    4. routeSchematic: Şematik gösterim için düğümler.
-
-    JSON FORMATI:
-    {
-      "riskIntensity": [ { "name": "Bölge", "value": 50, "color": "#hex" } ],
-      "timeline": [ { "title": "Başlık", "description": "Detay", "type": "info/warning/danger/break", "icon": "traffic/wind" } ],
-      "criticalPoints": [
-        {
-          "id": "1",
-          "coordinate": "32.85,39.92", 
-          "timeOffsetHours": 3.5,
-          "weather": { "location": "Bölge", "temp": "-", "condition": "-", "icon": "cloudy" },
-          "traffic": { "status": "heavy", "description": "Yoğun trafik", "tollInfo": "Ücretli" },
-          "incident": { "type": "accident", "description": "Kaza Kara Noktası", "source": "KGM" }
-        }
-      ],
-      "routeSchematic": {
-        "nodes": [
-          { "name": "İstanbul", "type": "origin", "distanceFromStart": "0 km", "timeFromStart": "0s 0dk" },
-          { "name": "Bolu Dağı", "type": "stop", "distanceFromStart": "250 km", "timeFromStart": "3s 30dk" },
-          { "name": "Ankara", "type": "destination", "distanceFromStart": "450 km", "timeFromStart": "5s 30dk" }
-        ],
-        "totalDistance": "450 km",
-        "totalDuration": "5s 30dk"
-      },
-      "mandatoryBreak": "Gerekir/Gerekmez",
-      "breakNote": "4.5 saat kuralı..."
-    }
+    İSTENEN ÇIKTILAR (JSON): riskIntensity, timeline, criticalPoints, routeSchematic, mandatoryBreak, breakNote.
+    JSON FORMATI: { "riskIntensity": [ { "name": "Bölge", "value": 50, "color": "#hex" } ], "timeline": [ { "title": "Başlık", "description": "Detay", "type": "info", "icon": "traffic" } ], "criticalPoints": [ { "id": "1", "coordinate": "32.85,39.92", "timeOffsetHours": 3.5, "weather": { "location": "Bölge", "temp": "-", "condition": "-", "icon": "cloudy" }, "traffic": { "status": "heavy", "description": "Yoğun trafik", "tollInfo": "Ücretli" }, "incident": { "type": "accident", "description": "Kaza Kara Noktası", "source": "KGM" } } ], "routeSchematic": { "nodes": [ { "name": "İstanbul", "type": "origin", "distanceFromStart": "0 km", "timeFromStart": "0s 0dk" } ], "totalDistance": "450 km", "totalDuration": "5s 30dk" }, "mandatoryBreak": "Gerekir/Gerekmez", "breakNote": "4.5 saat kuralı..." }
   `;
-
-  const response = await generateWithRetry(ai, {
-    model: "gemini-2.5-flash",
-    contents: prompt,
-    config: { tools: [{ googleSearch: {} }] }
-  });
-
-  return {
-    data: parseJSONResponse(response.text),
-    sources: response.candidates?.[0]?.groundingMetadata?.groundingChunks
-  };
+  const response = await generateWithTelemetry(ai, { model, contents: prompt, config: { tools: [{ googleSearch: {} }] } }, 'critical', model, options);
+  return { data: validateCriticalAnalysis(parseJsonResponse(response.text)), sources: usageFromResponse(response).sources };
 };
 
-export const analyzeRoute = async (
-  originName: string,
-  destinationName: string,
-  originCoords?: string,
-  destCoords?: string,
-  options?: RouteOptions
-): Promise<RouteAnalysis> => {
+export const analyzeRoute = async (originName: string, destinationName: string, originCoords?: string, destCoords?: string, options?: RouteOptions): Promise<RouteAnalysis> => {
   const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
-  if (!apiKey) {
-    throw new Error("Gemini API key is not configured (GEMINI_API_KEY).");
-  }
-  const ai = new GoogleGenAI({ apiKey });
-
-  try {
-    // 1. Calculate basics (Distance, Duration, Route Line)
-    const routeData = await routeAgent(ai, originName, destinationName, originCoords, destCoords, options);
-
-    // 2. Risk Analysis (Sequential: Need this first to know WHERE to check weather)
-    const analysisResult = await criticalAnalysisAgent(
-      ai,
-      routeData.routeDescription,
-      originName,
-      destinationName,
-      routeData.estimatedArrivalHours
-    );
-    const analysis = analysisResult.data;
-
-    // 3. Determine Weather Locations (Standard + Critical Points)
-    const weatherLocations: any[] = [
-      { name: originName, role: 'origin', timeOffset: 0 }
-    ];
-
-    // Add Critical Points to Weather Check
-    if (analysis.criticalPoints && analysis.criticalPoints.length > 0) {
-      analysis.criticalPoints.forEach((cp: CriticalPoint) => {
-        // Use the AI's estimated time offset, default to halfway if missing
-        const offset = cp.timeOffsetHours || (routeData.estimatedArrivalHours / 2);
-        // Use location name from weather object or description if available
-        const locName = cp.weather?.location || "Bilinmeyen Konum";
-        weatherLocations.push({
-          name: locName,
-          role: 'waypoint',
-          timeOffset: offset,
-          pointId: cp.id // Track ID to merge back
-        });
-      });
-    } else {
-      // Fallback if no critical points found
-      weatherLocations.push({ name: destinationName, role: 'destination', timeOffset: routeData.estimatedArrivalHours });
-    }
-
-    // Ensure Destination is always last
-    if (!weatherLocations.find(l => l.role === 'destination')) {
-      weatherLocations.push({ name: destinationName, role: 'destination', timeOffset: routeData.estimatedArrivalHours });
-    }
-
-    // 4. Fetch Accurate Weather
-    const weatherResults = await weatherAgent(ai, weatherLocations);
-
-    // 5. Merge Weather back into Critical Points
-    if (analysis.criticalPoints) {
-      analysis.criticalPoints = analysis.criticalPoints.map((cp: CriticalPoint) => {
-        // Find matching weather result. 
-        // We match by approximate location name or order if we tracked it more strictly.
-        // Simplified matching: Try to find a waypoint with similar name
-        const match = weatherResults.find((w: any) =>
-          w.location === cp.weather?.location // Assuming names match reasonably well
-        );
-
-        if (match) {
-          return {
-            ...cp,
-            weather: {
-              location: match.location,
-              temp: match.temp,
-              condition: match.condition,
-              icon: match.icon
-            }
-          };
-        }
-        return cp;
-      });
-    }
-
-    const weatherOrigin = weatherResults.find((w: any) => w.location.includes(originName)) || weatherResults[0] || { temp: "-", condition: "-", icon: "cloudy" };
-    const weatherDest = weatherResults.find((w: any) => w.location.includes(destinationName)) || weatherResults[weatherResults.length - 1] || { temp: "-", condition: "-", icon: "cloudy" };
-
-    // Filter out origin/dest for waypoints list
-    const waypointsOnly = weatherResults.filter((w: any) =>
-      !w.location.includes(originName) && !w.location.includes(destinationName)
-    ).map((w: any) => ({
-      location: w.location, temp: w.temp, condition: w.condition, icon: w.icon
-    }));
-
-    return {
-      summary: {
-        totalDistance: routeData.totalDistance || "0 km",
-        estimatedDuration: routeData.estimatedDuration || "0 sa",
-        mandatoryBreak: analysis.mandatoryBreak || "-",
-        breakNote: analysis.breakNote || "-"
-      },
-      weather: {
-        origin: { location: originName, temp: weatherOrigin.temp || "-", condition: weatherOrigin.condition || "-", icon: (weatherOrigin.icon as any) || "cloudy" },
-        destination: { location: destinationName, temp: weatherDest.temp || "-", condition: weatherDest.condition || "-", icon: (weatherDest.icon as any) || "cloudy" },
-        waypoints: waypointsOnly
-      },
-      riskIntensity: analysis.riskIntensity || [],
-      riskTypes: analysis.riskTypes || [],
-      timeline: analysis.timeline || [],
-      criticalPoints: analysis.criticalPoints || [],
-      routeSchematic: analysis.routeSchematic || { nodes: [], totalDistance: "-", totalDuration: "-" },
-      groundingMetadata: analysisResult.sources as any
-    };
-
-  } catch (error) {
-    console.error("Multi-Agent Error:", error);
-    throw error;
-  }
+  if (!apiKey) throw new Error('Gemini API key is not configured (GEMINI_API_KEY).');
+  const model = resolveGeminiModel(options?.model);
+  const ai = geminiClientFactory(apiKey);
+  const routeData = await routeAgent(ai, model, originName, destinationName, originCoords, destCoords, options);
+  const criticalResult = await criticalAnalysisAgent(ai, model, routeData.routeDescription, originName, destinationName, routeData.estimatedArrivalHours, options);
+  const analysis = criticalResult.data;
+  const criticalPoints = analysis.criticalPoints as CriticalPoint[];
+  const locations: { name: string; role: 'origin' | 'destination' | 'waypoint'; timeOffset: number }[] = [{ name: originName, role: 'origin', timeOffset: 0 }];
+  criticalPoints.forEach(point => locations.push({ name: point.weather.location, role: 'waypoint', timeOffset: point.timeOffsetHours ?? routeData.estimatedArrivalHours / 2 }));
+  locations.push({ name: destinationName, role: 'destination', timeOffset: routeData.estimatedArrivalHours });
+  const weatherResult = await weatherAgent(ai, model, locations, options);
+  const weatherResults = weatherResult.data;
+  const weatherOrigin = weatherResults.find(weather => weather.location.includes(originName)) ?? weatherResults[0];
+  const weatherDestination = weatherResults.find(weather => weather.location.includes(destinationName)) ?? weatherResults.at(-1);
+  if (!weatherOrigin || !weatherDestination) throw new Error('Validated weather response had no origin or destination result.');
+  return {
+    summary: { totalDistance: routeData.totalDistance, estimatedDuration: routeData.estimatedDuration, mandatoryBreak: analysis.mandatoryBreak as string, breakNote: analysis.breakNote as string },
+    weather: { origin: { ...weatherOrigin, location: originName }, destination: { ...weatherDestination, location: destinationName }, waypoints: weatherResults.filter(weather => !weather.location.includes(originName) && !weather.location.includes(destinationName)) },
+    riskIntensity: analysis.riskIntensity as RouteAnalysis['riskIntensity'], riskTypes: (analysis.riskTypes ?? []) as RouteAnalysis['riskTypes'], timeline: analysis.timeline as RouteAnalysis['timeline'],
+    criticalPoints: criticalPoints.map(point => ({ ...point, weather: weatherResults.find(weather => weather.location === point.weather.location) ?? point.weather })),
+    routeSchematic: analysis.routeSchematic as RouteAnalysis['routeSchematic'],
+    groundingMetadata: dedupeGroundingChunks([...criticalResult.sources, ...weatherResult.sources])
+  };
 };

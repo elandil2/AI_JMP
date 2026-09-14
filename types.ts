@@ -66,12 +66,12 @@ export interface CriticalPoint {
   timeOffsetHours?: number; // Estimated hours from start to reach this point
   weather: WeatherInfo;
   traffic: {
-    status: 'fluid' | 'moderate' | 'heavy' | 'stopped';
+    status: 'normal' | 'fluid' | 'moderate' | 'heavy' | 'stopped';
     description: string;
     tollInfo?: string;
   };
   incident: {
-    type: 'accident' | 'roadwork' | 'none';
+    type: 'accident' | 'roadwork' | 'none' | 'break' | 'roadwork_proximity' | 'terrain_hazard' | 'weather_related';
     description: string;
     source?: string;
   };
@@ -79,7 +79,7 @@ export interface CriticalPoint {
 
 export interface RouteSegmentNode {
   name: string;
-  type: 'origin' | 'destination' | 'stop' | 'break';
+  type: 'origin' | 'destination' | 'stop' | 'break' | 'critical' | 'intermediate';
   distanceFromStart: string; // e.g. "270 km"
   timeFromStart: string; // e.g. "3s 15dk"
 }
@@ -102,6 +102,60 @@ export interface RouteOptions {
   stopName?: string;
   stopCoords?: string;
   departureTime?: string; // ISO string
+  /** Approved Gemini model identifier. Omit to use the default model. */
+  model?: string;
+  /** Receives one sanitized metering event for each provider attempt. */
+  onUsage?: (event: GenerationEvent) => Promise<void> | void;
+}
+
+export type GenerationProvider = 'gemini' | 'maps';
+export type GenerationStage = 'route' | 'critical' | 'weather' | 'directions';
+export type GenerationOutcome = 'success' | 'error';
+export type RouteSource = 'maps' | 'gemini_fallback' | 'unavailable';
+
+export interface GenerationTokens {
+  prompt?: number;
+  candidate?: number;
+  thoughts?: number;
+  cached?: number;
+  toolUse?: number;
+  total?: number;
+}
+
+export interface EstimatedUsageCost {
+  currency: 'USD';
+  pricingVersion: string;
+  tokenUsd?: number | null;
+  searchUsd?: number | null;
+  directionsUsd?: number | null;
+  totalUsd?: number | null;
+  assumption?: string;
+}
+
+/** Sanitized provider metering. It intentionally never contains credentials or request bodies. */
+export interface GenerationEvent {
+  [key: string]: unknown;
+  provider: GenerationProvider;
+  stage: GenerationStage;
+  model?: string;
+  outcome: GenerationOutcome;
+  durationMs: number;
+  tokens?: GenerationTokens;
+  searchQueryCount?: number;
+  sourceCount?: number;
+  estimatedCost: EstimatedUsageCost;
+  routeSource?: RouteSource;
+  error?: string;
+  errorCode?: string;
+  /** Flat compatibility projection for persistence consumers. */
+  promptTokens?: number;
+  candidateTokens?: number;
+  thoughtsTokens?: number;
+  cachedTokens?: number;
+  toolPromptTokens?: number;
+  tokenCostUsd?: number | null;
+  searchCostUsd?: number | null;
+  mapsCostUsd?: number | null;
 }
 
 export interface BatchItem {
