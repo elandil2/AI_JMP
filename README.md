@@ -1,102 +1,59 @@
-# Logistics Route Analyst
+# AI_JMP — Rota Analizi ve Yolculuk Raporları
 
-AI-powered route risk analysis and safety briefing platform for truck operations. The app combines Google-powered route analysis, Gemini-generated risk summaries, weather checks, Supabase-backed persistence, and shareable report links in a Next.js application.
+Lojistik operasyonlarında yolculuk öncesi hazırlığı destekleyen web uygulaması. Başlangıç ve varış noktalarından Google Maps rota bilgisi, Gemini destekli risk/hava değerlendirmesi ve paylaşılabilir bir yolculuk raporu üretir.
 
-## What the app does
+**Önemli:** Uygulama tıra özel navigasyon veya yol uygunluğu onayı değildir. Maps otomobil rotasını, tahmini kamyon sürüş süresini ve mola dahil planlama süresini ayrı gösterir. Araç yüksekliği, ağırlığı, yük türü ve geçiş kısıtlarının uygunluğunu garanti etmez.
 
-- Authenticated dashboard for creating, reviewing, exporting, and deleting route reports
-- Single-route report generation from origin/destination selections
-- Batch CSV upload flow for generating multiple reports
-- Public share links for finished reports
-- Admin area and protected application routes backed by Supabase auth
-- Scheduled keep-alive endpoint configured through Vercel cron jobs
+## Nereden başlamalıyım?
 
-## Tech stack
+- **Kullanıcı / operatör:** [Türkçe kullanım kılavuzu](docs/KULLANIM_KILAVUZU_TR.md)
+- **Teknik ekip:** [Kurulum ve devir rehberi](docs/KURULUM_VE_DEVIR_TR.md)
+- **Bu teslimde neler var?** [15 Eylül 2026 sürüm notu](docs/SURUM_NOTLARI_2026-09-15.md)
+- **Canlı uygulama:** [AI_JMP](https://jmpai-snowy.vercel.app)
 
-- Next.js 15
-- React 19
-- TypeScript
-- Supabase Auth and database
-- Google Gemini via `@google/genai`
-- Recharts for report visualizations
+## Başlıca özellikler
 
-## Prerequisites
+- Hesapla giriş ve raporların listelendiği kontrol paneli.
+- İl/ilçe, kalkış zamanı ve ücretli yol tercihiyle tek rapor oluşturma.
+- Mesafe, Maps otomobil süresi, tahmini kamyon sürüşü ve dinlenme sürelerinin ayrıştırılması.
+- Numaralı rota şeması: geniş ekranda üç sütunlu kıvrımlı akış, dar ekranda dikey sıralama.
+- Risk, hava durumu ve mevcut kaynak bağlantılarının görüntülenmesi.
+- Paylaşım bağlantısı, WhatsApp paylaşımı, navigasyon bağlantısı ve yazdırma/PDF.
+- Seçilen raporların listesini CSV olarak dışa aktarma.
+- En fazla 10 farklı rotalık CSV kuyruğu; her satırı operatörün tek tek başlatması.
 
-- Node.js LTS
-- npm
-- A Supabase project
-- A Gemini API key
+Normal kullanımın varsayılan modeli **Gemini 2.5 Flash**. Yönetici ekranında başka model seçeneği görünmesi, sağlayıcı hesabında çalıştığının doğrulandığı anlamına gelmez. 3.8 karşılaştırması tamamlanmış bir test olarak sunulmaz.
 
-## Environment variables
+## Teknik özet
 
-Create a local env file such as `.env.local` and add the values below.
+Next.js 15, React 19, TypeScript, Supabase Auth/veritabanı ve Google Gemini (`@google/genai`). Kesin bağımlılık çözümlemesi `package-lock.json` içindedir.
+
+Mevcut ve uyumlu bir Supabase ortamı ile geçerli servis anahtarları hazırsa:
 
 ```bash
-NEXT_PUBLIC_SUPABASE_URL="https://your-project.supabase.co"
-NEXT_PUBLIC_SUPABASE_ANON_KEY="your-supabase-anon-key"
-SUPABASE_SERVICE_ROLE_KEY="your-supabase-service-role-key"
-GEMINI_API_KEY="your-gemini-api-key"
-MAPBOX_TOKEN=""
-NEXT_PUBLIC_APP_URL="http://localhost:3000"
+npm ci
+npm run dev
 ```
 
-Notes:
+Önce [.env.example](.env.example) dosyasını yerelde `.env.local` adıyla kopyalayıp kendi değerlerinizi girin. Ardından `http://localhost:3000` adresini açın. Bu komutlar veritabanını oluşturmaz. Sıfırdan kurulum öncesinde [devir ön koşullarını](docs/KURULUM_VE_DEVIR_TR.md) okuyun.
 
-- `GEMINI_API_KEY` is the Gemini key used by `services/geminiService.ts` (`API_KEY` is accepted for older installations).
-- `SUPABASE_SERVICE_ROLE_KEY` is required for server-side operations such as the keep-alive route and should never be exposed in the browser.
-- `NEXT_PUBLIC_APP_URL` is used when generating share links for reports.
-- `MAPBOX_TOKEN` is optional.
-
-## Local development
-
-1. Install dependencies:
-
-   ```bash
-   npm install
-   ```
-
-2. Start the development server:
-
-   ```bash
-   npm run dev
-   ```
-
-3. Open `http://localhost:3000`.
-
-Useful scripts:
+Kontroller:
 
 ```bash
-npm run dev
+npm test
+npm run typecheck
 npm run build
 npm run start
-npm run lint
 ```
 
-## Main application areas
+`npm run start`, başarılı build sonrasında kullanılır. `npm run lint` mevcut durumda ilk yapılandırma ekranını açıyor; lint kontrolü geçmiş sayılmamalıdır.
 
-- `/` and `/login`: authentication entry points
-- `/dashboard`: authenticated report list and report actions
-- `/reports/new`: create a single route report
-- `/reports/batch`: upload CSV data for batch report creation
-- `/reports/[id]`: authenticated report detail view
-- `/r/[slug]`: public share page for a report
-- `/admin`: admin workspace
+## Yayın ve teslim durumu
 
-## Vercel deployment
+GitHub deposu `elandil2/AI_JMP`, Vercel projesi `jmp__ai`; üretim dalı `main`.
 
-This repo already includes a `vercel.json` file with a scheduled cron job for:
+15 Eylül 2026 tarihinde Ataşehir → Van/Erciş için tek canlı Gemini 2.5 Flash raporu başarıyla oluşturuldu ve 12 duraklı yeni şema doğrulandı. Bu sonuç tüm rotaların, hesapların, tahminlerin veya güvenlik kontrollerinin eksiksiz doğrulandığı anlamına gelmez.
 
-- `GET /api/cron/keep-alive`
+Teslim ZIP'i kaynak kod paketidir: **API anahtarları, kullanıcılar ve rapor verileri içermez; tam sistem yedeği değildir.** Mevcut Supabase temel şemasının tam kuruluş migration'ı bu depoda bulunmuyor. Güvenlik sıkılaştırması ve tam geri yükleme testi ayrı devir maddeleridir.
 
-To deploy on Vercel:
-
-1. Import the GitHub repository into Vercel or open the existing Vercel project.
-2. Set all production environment variables from the list above.
-3. Confirm the Production Branch is `main`.
-4. Redeploy the project after changing branch settings or environment variables.
-
-If your project is still tracking `master`, Vercel may continue building from the old branch. After renaming the GitHub default branch to `main`, also check the Vercel project settings and switch the Production Branch to `main` there.
-
-## Branch note
-
-This project was originally using `master`. For new production updates to deploy correctly through GitHub and Vercel, the repository and Vercel production settings should both point to `main`.
+Eski tarihli inceleme/onarım belgeleri tarihsel kayıttır; güncel kurulum ve kullanım için yukarıdaki Türkçe rehberler esas alınmalıdır.
