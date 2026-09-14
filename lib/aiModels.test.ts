@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { resolveGeminiModel } from './aiModels';
-import { parseJsonResponse, validateRouteFallback, validateWeatherResults } from './analysisValidation';
+import { parseJsonResponse, validateCriticalAnalysis, validateRouteFallback, validateWeatherResults } from './analysisValidation';
 import { estimateGeminiUsageCost, estimatedDirectionsCost } from './usageCost';
 
 test('only approved Gemini models resolve', () => {
@@ -32,4 +32,38 @@ test('JSON validation accepts arrays for weather and rejects invalid payloads', 
   assert.equal(weather.length, 1);
   assert.throws(() => validateWeatherResults(parseJsonResponse('{"location":"Ankara"}')), /non-empty array/);
   assert.throws(() => validateRouteFallback(parseJsonResponse('{"totalDistance":"1 km"}')), /invalid shape/);
+});
+
+test('known composite weather labels normalize without accepting unrelated icons', () => {
+  const weather = validateWeatherResults([
+    { location: 'Bursa', temp: '12°C', condition: 'Parçalı bulutlu', icon: 'partly_cloudy' },
+    { location: 'Ankara', temp: '2°C', condition: 'Karla karışık yağmur', icon: 'rain_snow_mix' },
+    { location: 'Afyon', temp: '8°C', condition: 'Gök gürültüsü', icon: 'thunderstorm' }
+  ]);
+  assert.deepEqual(weather.map((item) => item.icon), ['cloudy', 'snow', 'storm']);
+  const turkish = validateWeatherResults([
+    { location: 'Bursa', temp: '10°C', condition: 'Bulutlu', icon: 'parçalı bulutlu' },
+    { location: 'Ankara', temp: '2°C', condition: 'Yağmurlu', icon: 'sağanak yağmur' },
+    { location: 'Bolu', temp: '0°C', condition: 'Sisli', icon: 'sis' }
+  ]);
+  assert.deepEqual(turkish.map((item) => item.icon), ['cloudy', 'rainy', 'fog']);
+  assert.throws(() => validateWeatherResults([{ location: 'Bursa', temp: '12°C', condition: 'Bilinmiyor', icon: 'decorative-star' }]), /icon is invalid/);
+});
+
+test('critical categories normalize known labels and reject unknown or negated labels', () => {
+  const sample = () => ({
+    riskIntensity: [{ name: 'Bolu', value: 50, color: '#123456' }],
+    timeline: [{ title: 'Uyarı', description: 'Kontrol', type: 'warning' }],
+    criticalPoints: [{ id: '1', coordinate: '40.7,31.6', weather: { location: 'Bolu', temp: '8°C', condition: 'Bulutlu', icon: 'cloudy' }, traffic: { status: 'normal', description: 'Akıcı' }, incident: { type: 'road_work', description: 'Bakım' } }],
+    routeSchematic: { nodes: [{ name: 'Bolu', type: 'checkpoint', distanceFromStart: '1 km', timeFromStart: '1 dk' }], totalDistance: '1 km', totalDuration: '1 dk' },
+    mandatoryBreak: 'Gerekmez', breakNote: 'Kısa rota'
+  });
+  const valid = validateCriticalAnalysis(sample());
+  assert.equal((valid.criticalPoints as Array<{ traffic: { status: string }; incident: { type: string } }>)[0].incident.type, 'roadwork');
+  const badTraffic = sample();
+  badTraffic.criticalPoints[0].traffic.status = 'not-heavy';
+  assert.throws(() => validateCriticalAnalysis(badTraffic), /traffic.status is invalid/);
+  const badIncident = sample();
+  badIncident.criticalPoints[0].incident.type = 'collision';
+  assert.throws(() => validateCriticalAnalysis(badIncident), /incident.type is invalid/);
 });

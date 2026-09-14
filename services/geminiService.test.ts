@@ -9,7 +9,7 @@ type FakeResponse = { text: string; usageMetadata?: object; candidates?: object[
 const critical = JSON.stringify({
   riskIntensity: [{ name: 'Bolu', value: 50, color: '#123456' }],
   riskTypes: [], timeline: [{ title: 'Başlangıç', description: 'Yola çıkış', type: 'info' }],
-  criticalPoints: [{ id: '1', coordinate: '40.735,31.607', timeOffsetHours: 3.5, weather: { location: 'Bolu', temp: '8°C', condition: 'Yağmurlu', icon: 'rainy' }, traffic: { status: 'normal', description: 'Akıcı trafik' }, incident: { type: 'terrain_hazard', description: 'Dağ geçidi' } }],
+  criticalPoints: [{ id: '1', coordinate: '40.735,31.607', timeOffsetHours: 3.5, weather: { location: 'Bolu', temp: '8°C', condition: 'Parçalı bulutlu', icon: 'partly_cloudy' }, traffic: { status: 'normal', description: 'Akıcı trafik' }, incident: { type: 'terrain_hazard', description: 'Dağ geçidi' } }],
   routeSchematic: { nodes: [{ name: 'İstanbul', type: 'origin', distanceFromStart: '0 km', timeFromStart: '0s 0dk' }, { name: 'Bolu', type: 'critical', distanceFromStart: '260 km', timeFromStart: '3s 30dk' }, { name: 'Düzce', type: 'intermediate', distanceFromStart: '220 km', timeFromStart: '3s 0dk' }], totalDistance: '450 km', totalDuration: '5s 30dk' },
   mandatoryBreak: 'Gerekir', breakNote: '45 dakika mola'
 });
@@ -82,6 +82,12 @@ test('full Maps-backed flow forwards each allowlisted model and emits metered Se
         analysis = await analyzeRoute('Origin', 'Destination', '1,1', '2,2', { useTolls: true, model, onUsage: event => { events.push(event); } });
       } finally { restoreFetch(); }
       assert.ok(analysis);
+      assert.equal(analysis.criticalPoints?.[0]?.weather.icon, 'cloudy');
+      assert.equal(analysis.criticalPoints?.[0]?.traffic.status, 'fluid');
+      assert.equal(analysis.criticalPoints?.[0]?.incident.type, 'hazard');
+      assert.equal(analysis.criticalPoints?.[0]?.incident.rawType, 'terrain_hazard');
+      assert.equal(analysis.routeSchematic?.nodes[2]?.type, 'stop');
+      assert.equal(analysis.routeSchematic?.nodes[2]?.rawType, 'intermediate');
       assert.equal(calls.length, 2);
       assert.deepEqual(calls.map(call => call.model), [model, model]);
       assert.ok(calls.every(call => Array.isArray(call.config?.tools) && call.config.tools.length === 1));

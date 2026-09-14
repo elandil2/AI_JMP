@@ -15,3 +15,9 @@
 Join the two batches by `row_index` and identical input hash. For each route, compare structured completeness, cited source relevance, distance/duration/break consistency, unsupported assertions, elapsed provider time, prompt/output/thought tokens and estimated token cost. Show Search and Maps costs in separate columns. Compare estimates with the Google billing console when charges have posted; do not call estimates invoices.
 
 The smoke report already exposed a consistency risk: the UI summary stated 7 h 20 min while its break note discussed 5.7 h driving. Use this as a concrete QA check, not an automatic correction to the output.
+
+## First production gate (stopped)
+
+The 2.5 Flash queue `9109405a-50cb-4838-8cbd-daf1170956a0` was created with 10 pending rows, the frozen input hash `7da261de4d870f014c25b4bfe87a03f6dec601024c1be297f4050e3003573c5e`, toll roads enabled, and no departure time. Only row 0 (Bursa/Nilüfer → Ankara/Etimesgut) was submitted. It made one successful Maps request and one successful Gemini critical-analysis request, then failed local validation with `criticalPoints[0].weather.icon is invalid.` No weather request or subsequent batch row ran. The batch is `failed` and its next-item action is disabled. Logged estimated costs for this failed attempt: tokens $0.015294, Search $0.035000, Maps $0.005000; total $0.055294. This is an estimate, not a Google invoice.
+
+Historical successful reports include meaningful composite icons such as `partly_cloudy` and `thunderstorm`; the validator was broadened to normalize recognized weather terms while still rejecting unrelated values. No paid row has been retried. The ten-pair comparison is **not complete** until a new controlled run succeeds; do not count the failed row as a benchmark report.

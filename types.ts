@@ -66,12 +66,13 @@ export interface CriticalPoint {
   timeOffsetHours?: number; // Estimated hours from start to reach this point
   weather: WeatherInfo;
   traffic: {
-    status: 'normal' | 'fluid' | 'moderate' | 'heavy' | 'stopped';
+    status: 'fluid' | 'moderate' | 'heavy' | 'stopped';
     description: string;
     tollInfo?: string;
   };
   incident: {
-    type: 'accident' | 'roadwork' | 'none' | 'break' | 'roadwork_proximity' | 'terrain_hazard' | 'weather_related';
+    type: 'accident' | 'roadwork' | 'none' | 'weather' | 'break' | 'traffic' | 'hazard' | 'closure' | 'speed' | 'tunnel' | 'info' | 'warning';
+    rawType?: string;
     description: string;
     source?: string;
   };
@@ -79,7 +80,8 @@ export interface CriticalPoint {
 
 export interface RouteSegmentNode {
   name: string;
-  type: 'origin' | 'destination' | 'stop' | 'break' | 'critical' | 'intermediate';
+  type: 'origin' | 'destination' | 'stop' | 'break' | 'critical';
+  rawType?: string;
   distanceFromStart: string; // e.g. "270 km"
   timeFromStart: string; // e.g. "3s 15dk"
 }
