@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { WeatherInfo } from '../types';
-import { Cloud, Sun, CloudRain, CloudLightning, CloudSnow, CloudFog, Thermometer } from 'lucide-react';
+import { Cloud, Sun, CloudRain, CloudLightning, CloudSnow, CloudFog, CircleHelp } from 'lucide-react';
 
 interface WeatherWidgetsProps {
     origin: WeatherInfo;
@@ -11,6 +11,7 @@ interface WeatherWidgetsProps {
 
 const getWeatherIcon = (iconName: string) => {
     switch (iconName) {
+        case 'unknown': return <CircleHelp className="w-8 h-8 text-slate-500" />;
         case 'sunny': return <Sun className="w-8 h-8 text-amber-500" />;
         case 'rainy': return <CloudRain className="w-8 h-8 text-blue-500" />;
         case 'storm': return <CloudLightning className="w-8 h-8 text-purple-500" />;

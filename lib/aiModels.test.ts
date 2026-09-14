@@ -34,7 +34,7 @@ test('JSON validation accepts arrays for weather and rejects invalid payloads', 
   assert.throws(() => validateRouteFallback(parseJsonResponse('{"totalDistance":"1 km"}')), /invalid shape/);
 });
 
-test('known composite weather labels normalize without accepting unrelated icons', () => {
+test('weather display metadata normalizes, unknown icons stay explicitly unknown', () => {
   const weather = validateWeatherResults([
     { location: 'Bursa', temp: '12°C', condition: 'Parçalı bulutlu', icon: 'partly_cloudy' },
     { location: 'Ankara', temp: '2°C', condition: 'Karla karışık yağmur', icon: 'rain_snow_mix' },
@@ -47,10 +47,13 @@ test('known composite weather labels normalize without accepting unrelated icons
     { location: 'Bolu', temp: '0°C', condition: 'Sisli', icon: 'sis' }
   ]);
   assert.deepEqual(turkish.map((item) => item.icon), ['cloudy', 'rainy', 'fog']);
-  assert.throws(() => validateWeatherResults([{ location: 'Bursa', temp: '12°C', condition: 'Bilinmiyor', icon: 'decorative-star' }]), /icon is invalid/);
+  assert.equal(validateWeatherResults([{ location: 'Bursa', temp: '12°C', condition: 'Bilinmiyor', icon: 'decorative-star' }])[0].icon, 'unknown');
+  assert.equal(validateWeatherResults([{ location: 'Bursa', temp: '12°C', condition: 'Açık, yağış beklenmiyor', icon: 'sunny' }])[0].icon, 'sunny');
+  assert.equal(validateWeatherResults([{ location: 'Bursa', condition: 'No rain expected' }])[0].icon, 'unknown');
+  assert.throws(() => validateWeatherResults([{ temp: '12°C', icon: 'sunny' }]), /weather object/);
 });
 
-test('critical categories normalize known labels and reject unknown or negated labels', () => {
+test('critical display categories preserve the report without inventing traffic facts', () => {
   const sample = () => ({
     riskIntensity: [{ name: 'Bolu', value: 50, color: '#123456' }],
     timeline: [{ title: 'Uyarı', description: 'Kontrol', type: 'warning' }],
@@ -62,8 +65,14 @@ test('critical categories normalize known labels and reject unknown or negated l
   assert.equal((valid.criticalPoints as Array<{ traffic: { status: string }; incident: { type: string } }>)[0].incident.type, 'roadwork');
   const badTraffic = sample();
   badTraffic.criticalPoints[0].traffic.status = 'not-heavy';
-  assert.throws(() => validateCriticalAnalysis(badTraffic), /traffic.status is invalid/);
+  assert.equal((validateCriticalAnalysis(badTraffic).criticalPoints as typeof badTraffic.criticalPoints)[0].traffic.status, 'unknown');
   const badIncident = sample();
   badIncident.criticalPoints[0].incident.type = 'collision';
-  assert.throws(() => validateCriticalAnalysis(badIncident), /incident.type is invalid/);
+  assert.equal((validateCriticalAnalysis(badIncident).criticalPoints as typeof badIncident.criticalPoints)[0].incident.type, 'accident');
+  const variant = sample();
+  variant.timeline[0].type = 'weather-warning';
+  assert.equal((validateCriticalAnalysis(variant).timeline as typeof variant.timeline)[0].type, 'info');
+  const invalid = sample();
+  invalid.criticalPoints[0].coordinate = 'not-coordinates';
+  assert.throws(() => validateCriticalAnalysis(invalid), /coordinates/);
 });

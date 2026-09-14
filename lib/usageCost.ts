@@ -56,12 +56,12 @@ export function estimateGeminiUsageCost(input: GeminiUsageInput): EstimatedUsage
   };
 }
 
-export function estimatedDirectionsCost(): EstimatedUsageCost {
+export function estimatedDirectionsCost(trafficAware = false): EstimatedUsageCost {
   return {
     currency: 'USD',
-    pricingVersion: 'Google Maps Directions Legacy Essentials list price, September 2026',
-    directionsUsd: 0.005,
-    totalUsd: 0.005,
-    assumption: 'Conservative upper-bound estimate per attempted Directions request. Actual billing depends on the billed SKU, monthly free cap, and account pricing.'
+    pricingVersion: `Google Maps Directions Legacy ${trafficAware ? 'Advanced' : 'Essentials'} list price, September 2026`,
+    directionsUsd: trafficAware ? 0.01 : 0.005,
+    totalUsd: trafficAware ? 0.01 : 0.005,
+    assumption: 'List-price estimate per attempted Directions request; traffic requests use Advanced. Actual billing depends on free caps and account pricing.'
   };
 }

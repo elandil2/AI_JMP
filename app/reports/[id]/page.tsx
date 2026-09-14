@@ -7,11 +7,11 @@ import { authFetch } from "@/lib/apiClient";
 import Header from "@/components/Header";
 import { SummaryCards } from "@/components/SummaryCards";
 import { RiskCharts } from "@/components/RiskCharts";
-import { RouteTimeline } from "@/components/RouteTimeline";
-import { WeatherWidgets } from "@/components/WeatherWidgets";
 import { CriticalPointsTable } from "@/components/CriticalPointsTable";
 import { RouteSchematic } from "@/components/RouteSchematic";
+import { ReportSources } from "@/components/ReportSources";
 import type { RouteAnalysis } from "@/types";
+import { getReportStatusKind, reportStatusLabel, reportStatusMessage, shouldPollReport } from "@/lib/reportStatus";
 
 type ReportDetail = {
   id: string;
@@ -25,7 +25,9 @@ type ReportDetail = {
   destination_lat?: number;
   destination_lng?: number;
   status: string;
-  analysis: RouteAnalysis;
+  analysis?: RouteAnalysis | null;
+  error_message?: string | null;
+  created_at?: string | null;
 };
 
 export default function OperatorReportPage() {
@@ -45,8 +47,7 @@ export default function OperatorReportPage() {
     try {
       const res = await authFetch(`/api/reports/${id}`);
       if (!res.ok) {
-        const text = await res.text();
-        setError(text || "Rapor alınamadı");
+        setError("Rapor şu anda yüklenemedi. Lütfen daha sonra tekrar deneyin.");
         setLoading(false);
         return;
       }
@@ -65,7 +66,7 @@ export default function OperatorReportPage() {
   }, [id]);
 
   useEffect(() => {
-    if (report && (report.status === 'processing' || report.status === 'pending' || report.status === 'creating')) {
+    if (report && shouldPollReport(report)) {
       const timer = setTimeout(() => fetchReport(true), 3000);
       return () => clearTimeout(timer);
     }
@@ -76,8 +77,10 @@ export default function OperatorReportPage() {
     ? `${report.destination_city}${report.destination_county ? ", " + report.destination_county : ""}`
     : "";
 
+  const statusKind = report ? getReportStatusKind(report) : null;
+  const hasAnalysis = statusKind === "ready" && Boolean(report?.analysis);
   const mapEmbedUrl =
-    report && report.analysis
+    report && hasAnalysis
       ? `https://maps.google.com/maps?saddr=${report.origin_lat && report.origin_lng
         ? `${report.origin_lat},${report.origin_lng}`
         : encodeURIComponent(originLabel)
@@ -87,11 +90,11 @@ export default function OperatorReportPage() {
       }&dirflg=d&t=m&z=6&output=embed`
       : null;
 
-  const publicLink = report
+  const publicLink = hasAnalysis && report
     ? `${process.env.NEXT_PUBLIC_APP_URL || window.location.origin}/r/${report.public_slug}`
     : "";
 
-  const navigationUrl = report
+  const navigationUrl = hasAnalysis && report
     ? `https://www.google.com/maps/dir/?api=1&origin=${report.origin_lat && report.origin_lng
       ? `${report.origin_lat},${report.origin_lng}`
       : encodeURIComponent(originLabel)
@@ -130,17 +133,19 @@ export default function OperatorReportPage() {
             <h1 className="text-2xl font-bold text-slate-900">
               {report ? `${originLabel} → ${destLabel}` : "Rapor"}
             </h1>
-            {report && <p className="text-sm text-slate-500">Durum: {report.status}</p>}
+            {report && <p className="text-sm text-slate-500">Durum: {statusKind ? reportStatusLabel(statusKind) : report.status}</p>}
           </div>
           <div className="flex gap-2">
             {/* Dashboard button removed */}
           </div>
         </div>
 
-        {loading && <div className="text-sm text-slate-500">Yükleniyor...</div>}
-        {error && <div className="text-sm text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">{error}</div>}
+        {loading && <div className="text-sm text-slate-500" role="status">Yükleniyor...</div>}
+        {error && <div role="alert" className="text-sm text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">{error}</div>}
 
-        {report && (
+        {report && statusKind && statusKind !== "ready" && <div role="alert" className={`rounded-xl border px-4 py-3 text-sm ${statusKind === "failed" ? "border-rose-200 bg-rose-50 text-rose-800" : "border-amber-200 bg-amber-50 text-amber-900"}`}>{reportStatusMessage(report)}</div>}
+
+        {report && hasAnalysis && (
           <div className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               <div className="lg:col-span-2 bg-slate-100 border border-slate-200 rounded-2xl overflow-hidden min-h-[340px]">
@@ -160,25 +165,25 @@ export default function OperatorReportPage() {
                 <h4 className="font-semibold text-slate-900">Paylaşım</h4>
                 <button
                   onClick={() => window.open(navigationUrl, "_blank")}
-                  className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 px-4 rounded-xl"
+                  className="min-h-11 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 px-4 rounded-xl"
                 >
                   <Navigation className="w-4 h-4" /> Navigasyonu Aç
                 </button>
                 <button
                   onClick={shareWhatsapp}
-                  className="flex items-center justify-center gap-2 bg-green-500 hover:bg-green-600 text-white font-semibold py-2.5 px-4 rounded-xl"
+                  className="min-h-11 flex items-center justify-center gap-2 bg-green-500 hover:bg-green-600 text-white font-semibold py-2.5 px-4 rounded-xl"
                 >
                   <Share2 className="w-4 h-4" /> WhatsApp ile Paylaş
                 </button>
                 <button
                   onClick={copyLink}
-                  className="flex items-center justify-center gap-2 bg-slate-200 hover:bg-slate-300 text-slate-900 font-semibold py-2.5 px-4 rounded-xl"
+                  className="min-h-11 flex items-center justify-center gap-2 bg-slate-200 hover:bg-slate-300 text-slate-900 font-semibold py-2.5 px-4 rounded-xl"
                 >
                   <LinkIcon className="w-4 h-4" /> {copied ? "Kopyalandı" : "Bağlantıyı Kopyala"}
                 </button>
                 <button
                   onClick={handlePrint}
-                  className="flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-900 text-white font-semibold py-2.5 px-4 rounded-xl"
+                  className="min-h-11 flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-900 text-white font-semibold py-2.5 px-4 rounded-xl"
                 >
                   <Printer className="w-4 h-4" /> Yazdır / PDF
                 </button>
@@ -211,6 +216,8 @@ export default function OperatorReportPage() {
                     <RouteSchematic data={report.analysis.routeSchematic} />
                   </section>
                 )}
+
+                <ReportSources sources={report.analysis.groundingMetadata} />
               </div>
             )}
           </div>

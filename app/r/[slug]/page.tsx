@@ -5,11 +5,11 @@ import { useParams } from "next/navigation";
 import { Navigation } from "lucide-react";
 import { SummaryCards } from "@/components/SummaryCards";
 import { RiskCharts } from "@/components/RiskCharts";
-import { RouteTimeline } from "@/components/RouteTimeline";
-import { WeatherWidgets } from "@/components/WeatherWidgets";
 import { CriticalPointsTable } from "@/components/CriticalPointsTable";
 import { RouteSchematic } from "@/components/RouteSchematic";
+import { ReportSources } from "@/components/ReportSources";
 import type { RouteAnalysis } from "@/types";
+import { getReportStatusKind, reportStatusMessage, shouldPollReport } from "@/lib/reportStatus";
 
 type PublicReport = {
   id: string;
@@ -22,8 +22,10 @@ type PublicReport = {
   destination_county: string;
   destination_lat?: number;
   destination_lng?: number;
-  analysis: RouteAnalysis;
+  analysis?: RouteAnalysis | null;
   status: string;
+  error_message?: string | null;
+  created_at?: string | null;
 };
 
 export default function PublicReportPage() {
@@ -41,8 +43,7 @@ export default function PublicReportPage() {
     try {
       const res = await fetch(`/api/public/${slug}`);
       if (!res.ok) {
-        const text = await res.text();
-        setError(text || "Rapor bulunamadı");
+        setError("Paylaşılan rapor şu anda kullanıma hazır değil. Lütfen raporu oluşturan kişiyle iletişime geçin.");
         setLoading(false);
         return;
       }
@@ -61,7 +62,7 @@ export default function PublicReportPage() {
   }, [slug]);
 
   useEffect(() => {
-    if (report && (report.status === 'processing' || report.status === 'pending' || report.status === 'creating')) {
+    if (report && shouldPollReport(report)) {
       const timer = setTimeout(() => fetchReport(true), 3000);
       return () => clearTimeout(timer);
     }
@@ -71,8 +72,10 @@ export default function PublicReportPage() {
   const destLabel = report
     ? `${report.destination_city}${report.destination_county ? ", " + report.destination_county : ""}`
     : "";
+  const statusKind = report ? getReportStatusKind(report) : null;
+  const hasAnalysis = statusKind === "ready" && Boolean(report?.analysis);
   const mapEmbedUrl =
-    report && report.analysis
+    report && hasAnalysis
       ? `https://maps.google.com/maps?saddr=${report.origin_lat && report.origin_lng
         ? `${report.origin_lat},${report.origin_lng}`
         : encodeURIComponent(originLabel)
@@ -82,7 +85,7 @@ export default function PublicReportPage() {
       }&dirflg=d&t=m&z=6&output=embed`
       : null;
 
-  const navigationUrl = report
+  const navigationUrl = hasAnalysis && report
     ? `https://www.google.com/maps/dir/?api=1&origin=${report.origin_lat && report.origin_lng
       ? `${report.origin_lat},${report.origin_lng}`
       : encodeURIComponent(originLabel)
@@ -101,20 +104,21 @@ export default function PublicReportPage() {
             <h1 className="text-2xl font-bold text-slate-900">{report ? `${originLabel} → ${destLabel}` : "Rapor"}</h1>
           </div>
 
-          {report && (
+          {report && hasAnalysis && (
             <button
               onClick={() => window.open(navigationUrl, "_blank")}
-              className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 px-6 rounded-xl shadow-sm transition-colors"
+              className="min-h-11 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 px-6 rounded-xl shadow-sm transition-colors"
             >
               <Navigation className="w-4 h-4" /> Navigasyonu Aç
             </button>
           )}
         </div>
 
-        {loading && <div className="text-sm text-slate-500">Yükleniyor...</div>}
-        {error && <div className="text-sm text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">{error}</div>}
+        {loading && <div className="text-sm text-slate-500" role="status">Yükleniyor...</div>}
+        {error && <div role="alert" className="text-sm text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">{error}</div>}
+        {report && statusKind && statusKind !== "ready" && <div role="alert" className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">{reportStatusMessage(report)}</div>}
 
-        {report && (
+        {report && hasAnalysis && (
           <div className="space-y-6">
             <div className="bg-slate-100 border border-slate-200 rounded-2xl overflow-hidden min-h-[360px]">
               {mapEmbedUrl && (
@@ -156,11 +160,13 @@ export default function PublicReportPage() {
                   </section>
                 )}
 
+                <ReportSources sources={report.analysis.groundingMetadata} />
+
                 {/* Bottom Navigation Button */}
                 <div className="pt-8 pb-12 flex justify-center">
                   <button
                     onClick={() => window.open(navigationUrl, "_blank")}
-                    className="flex items-center justify-center gap-3 bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-10 rounded-2xl shadow-lg transition-all hover:scale-105 active:scale-95"
+                    className="min-h-11 flex items-center justify-center gap-3 bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-10 rounded-2xl shadow-lg transition-all hover:scale-105 active:scale-95"
                   >
                     <Navigation className="w-5 h-5" /> Google Haritalar'da Başlat
                   </button>

@@ -14,9 +14,9 @@ export const CriticalPointsTable: React.FC<CriticalPointsTableProps> = ({ points
                 <div className="w-16 h-16 bg-emerald-50 rounded-full flex items-center justify-center mb-4">
                     <Info className="w-8 h-8 text-emerald-500" />
                 </div>
-                <h4 className="text-lg font-bold text-slate-800 mb-1">Her Şey Yolunda</h4>
+                <h4 className="text-lg font-bold text-slate-800 mb-1">Kritik nokta verisi yok</h4>
                 <p className="text-slate-500 max-w-sm">
-                    Bu rota üzerinde şu an için herhangi bir kritik engel, kaza veya yol çalışması raporlanmamıştır.
+                    Bu raporda doğrulanmış kritik nokta verisi bulunmuyor. Bu durum yolun sorunsuz olduğunu göstermez.
                 </p>
             </div>
         );
@@ -50,7 +50,7 @@ export const CriticalPointsTable: React.FC<CriticalPointsTableProps> = ({ points
                                     <span className="text-xl">
                                         {point.weather.icon === 'rainy' ? '🌧️' :
                                             point.weather.icon === 'sunny' ? '☀️' :
-                                                point.weather.icon === 'snow' ? '❄️' : '☁️'}
+                                                point.weather.icon === 'snow' ? '❄️' : point.weather.icon === 'storm' ? '⛈️' : point.weather.icon === 'fog' ? '🌫️' : point.weather.icon === 'unknown' ? '?' : '☁️'}
                                     </span>
                                     <div>
                                         <div className="font-semibold text-slate-800">{point.weather.temp}</div>
@@ -63,7 +63,7 @@ export const CriticalPointsTable: React.FC<CriticalPointsTableProps> = ({ points
                             <td className="px-6 py-4">
                                 <div className="space-y-1">
                                     <div className="flex items-center gap-2">
-                                        <Truck className={`w-4 h-4 ${point.traffic.status === 'heavy' ? 'text-red-500' : 'text-emerald-500'}`} />
+                                        <Truck className={`w-4 h-4 ${point.traffic.status === 'heavy' || point.traffic.status === 'stopped' ? 'text-red-500' : point.traffic.status === 'fluid' ? 'text-emerald-500' : 'text-slate-500'}`} />
                                         <span className="font-medium text-slate-800">{point.traffic.description}</span>
                                     </div>
                                     {point.traffic.tollInfo && (

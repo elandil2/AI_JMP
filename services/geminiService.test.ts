@@ -86,14 +86,19 @@ test('full Maps-backed flow forwards each allowlisted model and emits metered Se
       assert.equal(analysis.criticalPoints?.[0]?.traffic.status, 'fluid');
       assert.equal(analysis.criticalPoints?.[0]?.incident.type, 'hazard');
       assert.equal(analysis.criticalPoints?.[0]?.incident.rawType, 'terrain_hazard');
-      assert.equal(analysis.routeSchematic?.nodes[2]?.type, 'stop');
-      assert.equal(analysis.routeSchematic?.nodes[2]?.rawType, 'intermediate');
+      assert.equal(analysis.routeSchematic?.nodes[1]?.type, 'stop');
+      assert.equal(analysis.routeSchematic?.nodes[1]?.rawType, 'intermediate');
+      assert.equal(analysis.summary.mapsDuration, '6 sa 0 dk');
+      assert.equal(analysis.summary.estimatedDuration, '8 sa 15 dk');
+      assert.equal(analysis.summary.breakDuration, '0 sa 45 dk');
+      assert.equal(analysis.routeSchematic?.nodes.at(-1)?.timeFromStart, analysis.summary.estimatedDuration);
+      assert.match(analysis.summary.routeNotice!, /otomobil/);
       assert.equal(calls.length, 2);
       assert.deepEqual(calls.map(call => call.model), [model, model]);
       assert.ok(calls.every(call => Array.isArray(call.config?.tools) && call.config.tools.length === 1));
       const mapsEvent = events.find(event => event.provider === 'maps');
       assert.equal(mapsEvent?.routeSource, 'maps');
-      assert.equal(mapsEvent?.mapsCostUsd, 0.005);
+      assert.equal(mapsEvent?.mapsCostUsd, 0.01);
       const geminiEvents = events.filter(event => event.provider === 'gemini');
       assert.equal(geminiEvents.length, 2);
       assert.ok(geminiEvents.every(event => event.searchQueryCount === 1 && event.sourceCount === 2 && event.promptTokens === 100 && event.candidateTokens === 40));
@@ -122,7 +127,7 @@ test('Gemini errors and telemetry failures never trigger a second paid attempt',
     const failedCalls: RequestParams[] = [];
     const errorEvents: GenerationEvent[] = [];
     installFakeGemini([new Error('timeout')], failedCalls);
-    await assert.rejects(() => analyzeRoute('Origin', 'Destination', undefined, undefined, { useTolls: true, onUsage: event => { errorEvents.push(event); } }), /timeout/);
+    await assert.rejects(() => analyzeRoute('Origin', 'Destination', undefined, undefined, { useTolls: true, onUsage: event => { errorEvents.push(event); } }), /Gemini request failed/);
     assert.equal(failedCalls.length, 1);
     assert.equal(errorEvents.length, 1);
     assert.equal(errorEvents[0]?.outcome, 'error');
@@ -134,5 +139,31 @@ test('Gemini errors and telemetry failures never trigger a second paid attempt',
       /telemetry unavailable/
     );
     assert.equal(successfulCalls.length, 1);
+  });
+});
+
+test('invalid model output retains billable tokens in one error event and stops before weather', async () => {
+  await withApiKey(async () => {
+    const calls: RequestParams[] = [];
+    const events: GenerationEvent[] = [];
+    installFakeGemini([metered(route), metered('{"riskIntensity":[]}')], calls);
+    await assert.rejects(() => analyzeRoute('Origin','Destination',undefined,undefined,{useTolls:true,onUsage:event=>{events.push(event);}}), /invalid shape/);
+    assert.equal(calls.length,2);
+    assert.equal(events.length,2);
+    assert.equal(events[1].outcome,'error');
+    assert.equal(events[1].errorCode,'invalid_generated_output');
+    assert.equal(events[1].promptTokens,100);
+    assert.ok(events[1].tokenCostUsd! > 0);
+  });
+});
+
+test('missing location weather is marked unknown instead of copying another city forecast', async () => {
+  await withApiKey(async () => {
+    const calls: RequestParams[] = [];
+    installFakeGemini([metered(route),metered(critical),metered(JSON.stringify([{location:'Other City',temp:'30°C',condition:'Açık',icon:'sunny'}]))],calls);
+    const result=await analyzeRoute('Origin','Destination',undefined,undefined,{useTolls:true});
+    assert.equal(result.weather.origin.icon,'unknown');
+    assert.equal(result.weather.destination.temp,'-');
+    assert.match(result.summary.routeNotice!,/AI tahminidir/);
   });
 });

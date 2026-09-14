@@ -8,7 +8,7 @@ import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { analyzeRoute } from "@/services/geminiService";
 import type { RouteAnalysis } from "@/types";
 
-const KGM_URL = "https://yol.kgm.gov.tr/KazaKaraNoktaWeb/";
+export const maxDuration = 300;
 const BUDGET_USD = 9;
 
 type RawRow = { originCity: string; originCounty?: string; destinationCity: string; destinationCounty?: string };
@@ -52,7 +52,7 @@ const restorePending = async (itemId: string, reason: string) => {
 
 const budgetGate = async (inputHash: string, operatorId: string, currentItemId: string) => {
   const supabase = getSupabaseAdmin();
-  const estimates = { token: estimate("BENCHMARK_ESTIMATED_TOKEN_COST_USD", 0.5), search: estimate("BENCHMARK_ESTIMATED_SEARCH_COST_USD", 0.2), maps: estimate("BENCHMARK_ESTIMATED_MAPS_COST_USD", 0.005) };
+  const estimates = { token: estimate("BENCHMARK_ESTIMATED_TOKEN_COST_USD", 0.5), search: estimate("BENCHMARK_ESTIMATED_SEARCH_COST_USD", 0.2), maps: estimate("BENCHMARK_ESTIMATED_MAPS_COST_USD", 0.01) };
   const { data: batches, error: batchesError } = await supabase.from("batches").select("id").eq("operator_id", operatorId).eq("input_hash", inputHash);
   if (batchesError) return { error: `STOP: cannot read benchmark batches (${batchesError.message})` };
   const batchIds = (batches ?? []).map((batch) => batch.id);
@@ -155,7 +155,7 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
 
   try {
     const options = { useTolls: batch.use_tolls, departureTime: batch.departure_time ?? undefined, model: batch.model, onUsage };
-    const analysis: RouteAnalysis = sanitizeAnalysis(await analyzeRoute(`${originLabel} | KGM: ${KGM_URL}`, `${destinationLabel} | KGM: ${KGM_URL}`, originCoords, destCoords, options));
+    const analysis: RouteAnalysis = sanitizeAnalysis(await analyzeRoute(originLabel, destinationLabel, originCoords, destCoords, options));
     if (telemetryWrites === 0) throw new Error("STOP: paid-call telemetry is missing");
     if (telemetryFailure) throw new Error(`STOP: telemetry persistence failed (${telemetryFailure})`);
     if (unknownTelemetryCost) throw new Error("STOP: paid-call cost telemetry is missing or unknown");

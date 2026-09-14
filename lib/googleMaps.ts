@@ -100,10 +100,10 @@ export async function getDirections(
   let failure: string | undefined;
   let failureCode: string | undefined;
   try {
-    const response = await fetch(`${baseUrl}?${params.toString()}`);
+    const response = await fetch(`${baseUrl}?${params.toString()}`, { signal: AbortSignal.timeout(20000) });
     const data: unknown = await response.json();
 
-    if (typeof data !== 'object' || data === null || (data as { status?: unknown }).status !== "OK") {
+    if (!response.ok || typeof data !== 'object' || data === null || (data as { status?: unknown }).status !== "OK") {
       const status = typeof data === 'object' && data !== null && typeof (data as { status?: unknown }).status === 'string'
         ? (data as { status: string }).status
         : 'invalid response';
@@ -112,15 +112,21 @@ export async function getDirections(
       failureCode = status;
     } else {
       const route = (data as { routes?: any[] }).routes?.[0];
-      if (!route?.legs?.[0]) throw new Error('Directions response did not contain a route leg.');
-      const leg = route.legs[0];
-      const steps: DirectionStep[] = leg.steps.map((step: any) => ({
+      if (!route?.legs?.length) throw new Error('Directions response did not contain a route leg.');
+      const legs = route.legs;
+      if (legs.some((leg: any) => !Number.isFinite(leg.distance?.value) || leg.distance.value <= 0 || !Number.isFinite(leg.duration?.value) || leg.duration.value <= 0)) throw new Error('Directions response has invalid distance or duration.');
+      const distance = legs.reduce((sum: number, leg: any) => sum + leg.distance.value, 0);
+      const duration = legs.reduce((sum: number, leg: any) => sum + leg.duration.value, 0);
+      const trafficDuration = legs.every((leg: any) => Number.isFinite(leg.duration_in_traffic?.value) && leg.duration_in_traffic.value > 0)
+        ? legs.reduce((sum: number, leg: any) => sum + leg.duration_in_traffic.value, 0) : undefined;
+      const durationText = (seconds: number) => { const minutes = Math.round(seconds / 60); return `${Math.floor(minutes / 60)} sa ${minutes % 60} dk`; };
+      const steps: DirectionStep[] = legs.flatMap((leg: any) => (leg.steps ?? []).map((step: any) => ({
         instruction: step.html_instructions?.replace(/<[^>]*>/g, "") || "", distance: step.distance?.text || "", duration: step.duration?.text || "", maneuver: step.maneuver
-      }));
+      })));
       result = {
-        distance: { text: leg.distance.text, value: leg.distance.value }, duration: { text: leg.duration.text, value: leg.duration.value },
-        durationInTraffic: leg.duration_in_traffic ? { text: leg.duration_in_traffic.text, value: leg.duration_in_traffic.value } : undefined,
-        startAddress: leg.start_address, endAddress: leg.end_address, summary: route.summary || "", steps, polyline: route.overview_polyline?.points || "", warnings: route.warnings || []
+        distance: { text: `${Math.round(distance / 1000)} km`, value: distance }, duration: { text: durationText(duration), value: duration },
+        durationInTraffic: trafficDuration === undefined ? undefined : { text: durationText(trafficDuration), value: trafficDuration },
+        startAddress: legs[0].start_address, endAddress: legs.at(-1).end_address, summary: route.summary || "", steps, polyline: route.overview_polyline?.points || "", warnings: route.warnings || []
       };
       console.log(`Google Maps API: Distance = ${result.distance.text}, Duration = ${result.duration.text}`);
     }
@@ -133,7 +139,7 @@ export async function getDirections(
   // Deliberately outside the request try/catch: telemetry persistence failure is never hidden or retried.
   await emitUsage(options.onUsage, {
     provider: 'maps', stage: 'directions', model: 'directions', outcome: result ? 'success' : 'error', durationMs: Date.now() - startedAt,
-    estimatedCost: estimatedDirectionsCost(), mapsCostUsd: 0.005, routeSource: result ? 'maps' : 'unavailable', errorCode: failureCode, error: failure
+    estimatedCost: estimatedDirectionsCost(Boolean(options.departureTime)), mapsCostUsd: options.departureTime ? 0.01 : 0.005, routeSource: result ? 'maps' : 'unavailable', errorCode: failureCode, error: failure
   });
   return result;
 }
@@ -173,16 +179,13 @@ export function calculateBreaks(durationHours: number): {
   totalBreakMinutes: number;
   description: string;
 } {
+  if (!Number.isFinite(durationHours) || durationHours < 0) throw new Error('Driving duration must be a non-negative number.');
   let remainingDrive = durationHours;
   let totalBreakMinutes = 0;
   let breakCount = 0;
   let dailyRestCount = 0;
 
-  // Track consecutive driving within a "day"
   let currentDailyDrive = 0;
-
-  // Simulation step: 0.1 hour
-  const step = 0.1;
 
   // Constants
   const MAX_CONTINUOUS_DRIVE = 4.5;
@@ -192,35 +195,19 @@ export function calculateBreaks(durationHours: number): {
   const BREAK_MINUTES = 45;
   const DAILY_REST_MINUTES = 11 * 60; // 11 hours
 
-  let continuousDrive = 0;
-
-  while (remainingDrive > 0) {
-    // Drive for a step
-    let driveTime = Math.min(step, remainingDrive);
+  while (remainingDrive > 0.000001) {
+    const driveTime = Math.min(MAX_CONTINUOUS_DRIVE, MAX_DAILY_DRIVE - currentDailyDrive, remainingDrive);
     remainingDrive -= driveTime;
     currentDailyDrive += driveTime;
-    continuousDrive += driveTime;
-
-    // Check for Continuous Break (4.5h)
-    if (continuousDrive >= MAX_CONTINUOUS_DRIVE - 0.01) { // epsilon for float
-      // If we also hit daily limit, the daily rest supersedes the 45m break
-      if (currentDailyDrive >= MAX_DAILY_DRIVE - 0.01) {
-        // This will be handled by the daily limit check below
-      } else {
-        // Take 45m break
-        totalBreakMinutes += BREAK_MINUTES;
-        breakCount++;
-        continuousDrive = 0; // Reset continuous drive counter
-      }
-    }
-
-    // Check for Daily Rest (9h)
-    if (currentDailyDrive >= MAX_DAILY_DRIVE - 0.01) {
-      // Take 11h rest
+    // Arrival ends the journey; never append an overnight rest after arrival.
+    if (remainingDrive <= 0.000001) break;
+    if (currentDailyDrive >= MAX_DAILY_DRIVE - 0.000001) {
       totalBreakMinutes += DAILY_REST_MINUTES;
       dailyRestCount++;
-      currentDailyDrive = 0; // Reset daily counter
-      continuousDrive = 0;   // Reset continuous too
+      currentDailyDrive = 0;
+    } else {
+      totalBreakMinutes += BREAK_MINUTES;
+      breakCount++;
     }
   }
 

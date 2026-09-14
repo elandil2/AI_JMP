@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { randomUUID } from "node:crypto";
+import { recordReportUsage } from "@/lib/generationTelemetry";
 import { requireAuth } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { findLocation } from "@/lib/location";
@@ -7,8 +9,7 @@ import { analyzeRoute } from "@/services/geminiService";
 import { sanitizeAnalysis } from "@/lib/analysis";
 import type { RouteAnalysis } from "@/types";
 
-const KGM_URL =
-  "https://yol.kgm.gov.tr/KazaKaraNoktaWeb/?_gl=1*1a3m75w*_ga*MTMyOTk2MTAzMC4xNzY1MjI5NjMy*_ga_P1MD63L4M4*czE3NjU0ODE5OTIkbzMkZzAkdDE3NjU0ODE5OTIkajYwJGwwJGgxNzU4NDg4NTAw";
+export const maxDuration = 300;
 
 type ReportPayload = {
   originCity: string;
@@ -56,9 +57,16 @@ export async function POST(req: Request) {
     departureTime
   } = body;
 
-  if (!originCity || !destinationCity) {
+  if (typeof originCity !== 'string' || !originCity.trim() || typeof destinationCity !== 'string' || !destinationCity.trim()) {
     return NextResponse.json({ error: "Origin and destination are required" }, { status: 400 });
   }
+  if ((originCounty !== undefined && typeof originCounty !== 'string') || (destinationCounty !== undefined && typeof destinationCounty !== 'string') || typeof useTolls !== 'boolean') return NextResponse.json({ error: 'Geçersiz rota bilgisi.' }, { status: 400 });
+  for (const [coordinate, limit] of [[originLat, 90], [originLng, 180], [destinationLat, 90], [destinationLng, 180], [stopLat, 90], [stopLng, 180]] as const) {
+    if (coordinate !== undefined && (typeof coordinate !== 'number' || !Number.isFinite(coordinate) || Math.abs(coordinate) > limit)) return NextResponse.json({ error: 'Geçersiz koordinat.' }, { status: 400 });
+  }
+  if ((departureTime != null && typeof departureTime !== 'string') || (stopName !== undefined && typeof stopName !== 'string')) return NextResponse.json({ error: 'Geçersiz kalkış zamanı veya durak bilgisi.' }, { status: 400 });
+  const departure = departureTime ? new Date(departureTime) : new Date();
+  if (Number.isNaN(departure.getTime()) || departure.getTime() < Date.now() - 60000) return NextResponse.json({ error: 'Başlangıç zamanı geçerli ve gelecekte olmalıdır.' }, { status: 400 });
 
   await ensureProfile(auth.userId, auth.email);
 
@@ -84,9 +92,6 @@ export async function POST(req: Request) {
 
   const originLabel = `${originCity}${originCounty ? ", " + originCounty : ""}`;
   const destLabel = `${destinationCity}${destinationCounty ? ", " + destinationCounty : ""}`;
-  // Inject KGM context to satisfy spec but will sanitize output
-  const originWithKgm = `${originLabel} | KGM: ${KGM_URL}`;
-  const destWithKgm = `${destLabel} | KGM: ${KGM_URL}`;
 
   const supabase = getSupabaseAdmin();
   const publicSlug = generateSlug(10);
@@ -105,7 +110,7 @@ export async function POST(req: Request) {
       destination_county: destinationCounty ?? "",
       destination_lat: resolvedDestLat ?? null,
       destination_lng: resolvedDestLng ?? null,
-      departure_time: departureTime ?? null,
+      departure_time: departure.toISOString(),
       status: "processing",
       error_message: null
     })
@@ -117,14 +122,17 @@ export async function POST(req: Request) {
   }
 
   try {
-    const rawAnalysis: RouteAnalysis = await analyzeRoute(originWithKgm, destWithKgm, originCoords, destCoords, {
+    const attemptId = randomUUID();
+    const rawAnalysis: RouteAnalysis = await analyzeRoute(originLabel, destLabel, originCoords, destCoords, {
       useTolls,
       stopName: stopName || undefined,
-      stopCoords
+      stopCoords,
+      departureTime: departure.toISOString(),
+      onUsage: event => recordReportUsage(inserted.id, attemptId, event)
     });
     const analysis = sanitizeAnalysis(rawAnalysis);
 
-    await supabase
+    const { error: saveError } = await supabase
       .from("reports")
       .update({
         analysis,
@@ -132,6 +140,7 @@ export async function POST(req: Request) {
         error_message: null
       })
       .eq("id", inserted.id);
+    if (saveError) throw new Error('Rapor sonucu kaydedilemedi.');
 
     return NextResponse.json({ id: inserted.id, publicSlug, analysis });
   } catch (err: any) {
@@ -143,7 +152,7 @@ export async function POST(req: Request) {
       })
       .eq("id", inserted.id);
 
-    return NextResponse.json({ error: "Gemini analysis failed", details: err?.message }, { status: 500 });
+    return NextResponse.json({ error: "Rapor tamamlanamadı. Ayrıntılar rapor sayfasında görüntülenebilir.", reportId: inserted.id }, { status: 500 });
   }
 }
 

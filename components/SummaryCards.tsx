@@ -2,7 +2,7 @@
 "use client";
 import React from 'react';
 import { SummaryStats, WeatherInfo } from '../types';
-import { Cloud, Sun, CloudRain, CloudLightning, CloudSnow, CloudFog, MapPin, Clock } from 'lucide-react';
+import { Cloud, Sun, CloudRain, CloudLightning, CloudSnow, CloudFog, CircleHelp, MapPin, Clock } from 'lucide-react';
 
 interface SummaryCardsProps {
   data: SummaryStats;
@@ -20,11 +20,13 @@ const WeatherIcon = ({ icon, className }: { icon: string, className?: string }) 
     case 'storm': return <CloudLightning className={`${className} text-indigo-600`} />;
     case 'snow': return <CloudSnow className={`${className} text-cyan-300`} />;
     case 'fog': return <CloudFog className={`${className} text-slate-400`} />;
+    case 'unknown': return <CircleHelp className={`${className} text-slate-400`} aria-label="Hava durumu bilinmiyor" />;
     default: return <Cloud className={`${className} text-slate-400`} />;
   }
 };
 
 export const SummaryCards: React.FC<SummaryCardsProps> = ({ data, weather }) => {
+  const isLegacyEstimate = !data.mapsDuration && !data.drivingDuration && !data.breakDuration && !data.generatedAt;
   return (
     <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
       {/* Origin Weather */}
@@ -57,11 +59,19 @@ export const SummaryCards: React.FC<SummaryCardsProps> = ({ data, weather }) => 
           </div>
           <div className="text-right">
             <span className="text-xs font-bold text-slate-400 print:text-slate-600 uppercase tracking-wider flex items-center justify-end gap-1">
-              <Clock className="w-3 h-3" /> Süre
+              <Clock className="w-3 h-3" /> {data.durationLabel || "Süre"}
             </span>
             <p className="text-2xl font-bold text-cyan-400 print:text-slate-900 mt-1">{data.estimatedDuration}</p>
           </div>
         </div>
+
+        {(data.mapsDuration || data.drivingDuration || data.breakDuration) && (
+          <dl className="mt-3 grid grid-cols-1 gap-1 border-t border-slate-700/50 pt-3 text-xs text-slate-200 print:border-slate-300 print:text-slate-700 sm:grid-cols-3 sm:gap-3">
+            {data.mapsDuration && <div><dt className="text-slate-400 print:text-slate-600">Google Maps · otomobil</dt><dd className="font-semibold">{data.mapsDuration}</dd></div>}
+            {data.drivingDuration && <div><dt className="text-slate-400 print:text-slate-600">Tahmini kamyon sürüşü</dt><dd className="font-semibold">{data.drivingDuration}</dd></div>}
+            {data.breakDuration && <div><dt className="text-slate-400 print:text-slate-600">Mola süresi</dt><dd className="font-semibold">{data.breakDuration}</dd></div>}
+          </dl>
+        )}
 
         <div className="mt-4 pt-4 border-t border-slate-700/50 print:border-slate-300 z-10 flex items-center justify-between">
           <div>
@@ -69,11 +79,14 @@ export const SummaryCards: React.FC<SummaryCardsProps> = ({ data, weather }) => 
             <span className="text-lg font-bold">{data.mandatoryBreak && data.mandatoryBreak !== '-' ? data.mandatoryBreak : 'Gerekli Değil'}</span>
           </div>
           <div className="text-right max-w-[180px]">
-            <span className="text-[10px] text-slate-400 print:text-slate-600 leading-tight block">
-              {data.breakNote || 'Toplam süreye yasal dinlenme molaları dahildir.'}
+            <span className="text-[10px] text-slate-400 print:text-slate-600 leading-tight block" role="note">
+              {data.routeNotice || data.breakNote || 'Toplam süreye yasal dinlenme molaları dahildir.'}
             </span>
           </div>
         </div>
+        <p className="mt-2 text-[10px] text-slate-400 print:text-slate-600">
+          {isLegacyEstimate ? "Eski tahminler kamyon kısıtlarını doğrulamaz." : "Google Maps otomobil rotasıdır; canlı süre kayıtlı rapordan farklı olabilir."}
+        </p>
       </div>
 
       {/* Destination Weather */}

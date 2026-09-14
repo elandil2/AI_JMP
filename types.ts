@@ -4,6 +4,12 @@ export interface SummaryStats {
   estimatedDuration: string;
   mandatoryBreak: string;
   breakNote: string;
+  mapsDuration?: string;
+  drivingDuration?: string;
+  breakDuration?: string;
+  durationLabel?: string;
+  routeNotice?: string;
+  generatedAt?: string;
 }
 
 export interface RiskSegment {
@@ -42,7 +48,7 @@ export interface WeatherInfo {
   location: string;
   temp: string;
   condition: string;
-  icon: 'sunny' | 'cloudy' | 'rainy' | 'storm' | 'snow' | 'fog';
+  icon: 'sunny' | 'cloudy' | 'rainy' | 'storm' | 'snow' | 'fog' | 'unknown';
 }
 
 export interface RouteAnalysis {
@@ -66,7 +72,7 @@ export interface CriticalPoint {
   timeOffsetHours?: number; // Estimated hours from start to reach this point
   weather: WeatherInfo;
   traffic: {
-    status: 'fluid' | 'moderate' | 'heavy' | 'stopped';
+    status: 'fluid' | 'moderate' | 'heavy' | 'stopped' | 'unknown';
     description: string;
     tollInfo?: string;
   };

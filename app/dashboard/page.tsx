@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { authFetch } from "@/lib/apiClient";
 import Header from "@/components/Header";
+import { getReportStatusKind, reportStatusLabel, reportStatusMessage, shouldPollReport, type ReportStatusKind } from "@/lib/reportStatus";
 
 type ReportListItem = {
   id: string;
@@ -12,6 +13,7 @@ type ReportListItem = {
   destination_city: string;
   status: string;
   created_at: string;
+  error_message?: string | null;
 };
 
 export default function DashboardPage() {
@@ -30,8 +32,7 @@ export default function DashboardPage() {
     try {
       const res = await authFetch("/api/reports");
       if (!res.ok) {
-        const text = await res.text();
-        setError(text || "Raporlar alınamadı");
+        setError("Raporlar şu anda yüklenemedi. Lütfen daha sonra tekrar deneyin.");
         setLoading(false);
         return;
       }
@@ -51,7 +52,7 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
-    const processing = reports.some(r => ['processing', 'pending', 'creating'].includes(r.status));
+    const processing = reports.some(r => shouldPollReport(r));
     if (processing) {
       const timer = setTimeout(() => fetchReports(true), 3000);
       return () => clearTimeout(timer);
@@ -143,7 +144,14 @@ export default function DashboardPage() {
     }
   }
 
-  const processingCount = reports.filter(r => ['processing', 'pending', 'creating'].includes(r.status)).length;
+  const processingCount = reports.filter(r => shouldPollReport(r)).length;
+  const needsAttention = reports.filter(r => getReportStatusKind(r) === "needs-attention");
+  const statusClass: Record<ReportStatusKind, string> = {
+    ready: "bg-emerald-100 text-emerald-700",
+    failed: "bg-rose-100 text-rose-700",
+    preparing: "bg-amber-100 text-amber-800",
+    "needs-attention": "bg-orange-100 text-orange-800"
+  };
 
   // Handler for individual checkbox
   const toggleSelect = (id: string) => {
@@ -168,8 +176,8 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-slate-50">
       <Header />
-      <main className="px-6 py-8 mx-auto max-w-5xl space-y-6">
-        <header className="flex items-center justify-between">
+      <main className="px-4 py-6 sm:px-6 sm:py-8 mx-auto max-w-5xl space-y-6">
+        <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-xs uppercase tracking-[0.2em] text-slate-500 font-semibold">Dashboard</p>
             <h1 className="text-2xl font-bold text-slate-900">Raporlar</h1>
@@ -196,17 +204,17 @@ export default function DashboardPage() {
             )}
           </div>
           <div className="flex gap-3">
-            <Link href="/reports/new" className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2 rounded-xl">
+            <Link href="/reports/new" className="min-h-11 flex items-center bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2 rounded-xl">
               Rapor Oluştur
             </Link>
-            <Link href="/reports/batch" className="border border-slate-300 px-4 py-2 rounded-xl text-slate-800 font-semibold">
+            <Link href="/reports/batch" className="min-h-11 flex items-center border border-slate-300 px-4 py-2 rounded-xl text-slate-800 font-semibold">
               CSV Yükle
             </Link>
           </div>
         </header>
 
         {processingCount > 0 && (
-          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-center gap-3 text-amber-800">
+          <div role="status" className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-center gap-3 text-amber-800">
             {/* Uses a pulse animation instead of a spinner to distinguish from page loading */}
             <div className="h-3 w-3 rounded-full bg-amber-500 animate-pulse"></div>
             <span className="font-medium text-sm">
@@ -215,19 +223,22 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {loading && !reports.length && <div className="text-sm text-slate-500">Yükleniyor...</div>}
-        {error && <div className="text-sm text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">{error}</div>}
+        {needsAttention.length > 0 && <div role="alert" className="rounded-xl border border-orange-200 bg-orange-50 p-4 text-sm text-orange-900">{needsAttention.length} rapor 15 dakika içinde tamamlanmadı. Otomatik yenileme durduruldu; kayıtlar değiştirilmedi. {reportStatusMessage(needsAttention[0])}</div>}
+
+        {loading && !reports.length && <div className="text-sm text-slate-500" role="status">Yükleniyor...</div>}
+        {error && <div role="alert" className="text-sm text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">{error}</div>}
 
         {!loading && !reports.length && <div className="text-sm text-slate-500">Henüz rapor yok.</div>}
 
         {reports.length > 0 && (
-          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow">
+          <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow">
             <table className="w-full text-sm">
               <thead className="bg-slate-50 text-slate-700">
                 <tr>
                   <th className="p-3 w-10">
                     <input
                       type="checkbox"
+                      aria-label="Tüm raporları seç"
                       className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
                       checked={reports.length > 0 && selectedIds.size === reports.length}
                       onChange={toggleSelectAll}
@@ -244,7 +255,8 @@ export default function DashboardPage() {
                   <tr key={r.id} className={`hover:bg-slate-50 ${selectedIds.has(r.id) ? 'bg-blue-50/50' : ''}`}>
                     <td className="p-3 w-10">
                       <input
-                        type="checkbox"
+                      type="checkbox"
+                        aria-label={`${r.origin_city} ile ${r.destination_city} raporunu seç`}
                         className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
                         checked={selectedIds.has(r.id)}
                         onChange={() => toggleSelect(r.id)}
@@ -254,11 +266,8 @@ export default function DashboardPage() {
                       {r.origin_city} → {r.destination_city}
                     </td>
                     <td className="p-3">
-                      <span className={`px-2 py-1 rounded-full text-xs ${r.status === 'ready' ? 'bg-emerald-100 text-emerald-700' :
-                        r.status === 'failed' ? 'bg-rose-100 text-rose-700' :
-                          'bg-amber-100 text-amber-800'
-                        }`}>
-                        {r.status}
+                      <span className={`px-2 py-1 rounded-full text-xs ${statusClass[getReportStatusKind(r)]}`}>
+                        {reportStatusLabel(getReportStatusKind(r))}
                       </span>
                     </td>
                     <td className="p-3 text-slate-600">{new Date(r.created_at).toLocaleString("tr-TR")}</td>
