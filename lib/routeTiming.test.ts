@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { calculateBreaks, getDirections, type DirectionsResult } from './googleMaps';
+import { calculateBreaks, calculateTruckDuration, getDirections, type DirectionsResult } from './googleMaps';
 import { mapsTiming, parseHours, reconcileSchematic } from './routeTiming';
 
 test('arrival does not receive a break or overnight rest after the trip has ended', () => {
@@ -31,6 +31,42 @@ test('the live Gebze example has distinct Maps and truck planning durations with
   assert.deepEqual(schematic.nodes.map(n=>n.name), ['Gebze','Earlier','Later','Ankara']);
   assert.equal(schematic.nodes.at(-1)?.timeFromStart, timing.summary.estimatedDuration);
   assert.equal(parseHours('3s 30dk'), 3.5);
+});
+
+test('planning speed defaults to 60 km/h, accepts 65, and keeps Maps duration as a floor', () => {
+  const route = { distance: { value: 550_000 }, duration: { value: 60 } } as DirectionsResult;
+  const at60 = mapsTiming(route);
+  assert.equal(at60.summary.drivingDuration, '9 sa 10 dk');
+  assert.equal(at60.summary.breakDuration, '11 sa 45 dk');
+  assert.equal(at60.summary.estimatedDuration, '20 sa 55 dk');
+  assert.match(at60.summary.routeNotice ?? '', /60 km\/sa ortalama/);
+
+  const at65 = mapsTiming(route, { planningSpeedKmh: 65 });
+  assert.equal(at65.summary.drivingDuration, '8 sa 28 dk');
+  assert.equal(at65.summary.breakDuration, '0 sa 45 dk');
+  assert.equal(at65.summary.estimatedDuration, '9 sa 13 dk');
+  assert.match(at65.summary.routeNotice ?? '', /65 km\/sa ortalama/);
+  assert.match(at65.summary.breakNote, /Gerçek sürüş\/takograf hesabı değildir/);
+
+  const mapsFloor = mapsTiming({
+    ...route,
+    duration: { text: '8 sa 30 dk', value: 8.5 * 3600 },
+  }, { planningSpeedKmh: 65 });
+  assert.equal(mapsFloor.drivingHours, 8.5);
+  assert.equal(mapsFloor.summary.drivingDuration, '8 sa 30 dk');
+  assert.throws(() => calculateTruckDuration(550_000, 59.9), /between 60 and 65/);
+  assert.throws(() => calculateTruckDuration(550_000, 65.1), /between 60 and 65/);
+});
+
+test('an exact 9-hour modeled arrival gets its required 4.5-hour break but no overnight rest', () => {
+  const exactNineHours = mapsTiming({
+    distance: { value: 540_000 },
+    duration: { value: 60 },
+  } as DirectionsResult);
+
+  assert.equal(exactNineHours.drivingHours, 9);
+  assert.equal(exactNineHours.summary.breakDuration, '0 sa 45 dk');
+  assert.equal(exactNineHours.summary.estimatedDuration, '9 sa 45 dk');
 });
 
 test('Maps sums all legs for an intermediate stop and preserves traffic duration', async () => {

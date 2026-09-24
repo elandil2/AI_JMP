@@ -35,6 +35,7 @@ const mapsPayload = {
     steps: [{ html_instructions: 'Düz git', distance: { text: '10 km' }, duration: { text: '10 dk' } }]
   }] }]
 };
+const canonicalPolyline = '_p~iF~ps|U_ulLnnqC_mqNvxq`@';
 
 const installFakeGemini = (responses: Array<FakeResponse | Error>, calls: RequestParams[]) => {
   setGeminiClientFactoryForTests(() => ({
@@ -50,9 +51,9 @@ const installFakeGemini = (responses: Array<FakeResponse | Error>, calls: Reques
   } as unknown as GeminiClient));
 };
 
-const installMapsFetch = () => {
+const installMapsFetch = (payload: unknown = mapsPayload) => {
   const original = globalThis.fetch;
-  globalThis.fetch = async () => new Response(JSON.stringify(mapsPayload), { status: 200 });
+  globalThis.fetch = async () => new Response(JSON.stringify(payload), { status: 200 });
   return () => { globalThis.fetch = original; };
 };
 
@@ -86,13 +87,16 @@ test('full Maps-backed flow forwards each allowlisted model and emits metered Se
       assert.equal(analysis.criticalPoints?.[0]?.traffic.status, 'fluid');
       assert.equal(analysis.criticalPoints?.[0]?.incident.type, 'hazard');
       assert.equal(analysis.criticalPoints?.[0]?.incident.rawType, 'terrain_hazard');
-      assert.equal(analysis.routeSchematic?.nodes[1]?.type, 'stop');
-      assert.equal(analysis.routeSchematic?.nodes[1]?.rawType, 'intermediate');
+      assert.equal(analysis.criticalPoints?.[0]?.routeVerification?.status, 'unverified');
+      assert.deepEqual(analysis.weather.waypoints, []);
+      assert.deepEqual(analysis.routeSchematic?.nodes.map(node => node.type), ['origin', 'destination']);
       assert.equal(analysis.summary.mapsDuration, '6 sa 0 dk');
       assert.equal(analysis.summary.estimatedDuration, '8 sa 15 dk');
       assert.equal(analysis.summary.breakDuration, '0 sa 45 dk');
       assert.equal(analysis.routeSchematic?.nodes.at(-1)?.timeFromStart, analysis.summary.estimatedDuration);
       assert.match(analysis.summary.routeNotice!, /otomobil/);
+      assert.match(analysis.summary.routeNotice!, /uyarı bulunmaması olay olmadığı anlamına gelmez/);
+      assert.equal(analysis.summary.sourceCoverage, 'unverified');
       assert.equal(calls.length, 2);
       assert.deepEqual(calls.map(call => call.model), [model, model]);
       assert.ok(calls.every(call => Array.isArray(call.config?.tools) && call.config.tools.length === 1));
@@ -108,6 +112,61 @@ test('full Maps-backed flow forwards each allowlisted model and emits metered Se
         { maps: { uri: 'https://maps.example.test', title: 'Map source', placeId: 'place-1' } }
       ]);
     }
+  });
+});
+
+test('Maps geometry keeps only corridor candidates and never trusts Gemini schematic steps', async () => {
+  await withApiKey(async () => {
+    const calls: RequestParams[] = [];
+    const restoreFetch = installMapsFetch({
+      ...mapsPayload,
+      routes: [{ ...mapsPayload.routes[0], overview_polyline: { points: canonicalPolyline } }]
+    });
+    process.env.GOOGLE_MAPS_API_KEY = 'test-maps-key';
+    const onCorridorCritical = JSON.parse(critical);
+    onCorridorCritical.criticalPoints[0].coordinate = '38.5,-120.2';
+    const corridorWeather = JSON.stringify([
+      ...JSON.parse(weather),
+      { location: 'Bolu', temp: '8°C', condition: 'Parçalı bulutlu', icon: 'cloudy' },
+      { location: 'OffRouteTown', temp: '35°C', condition: 'Sıcak', icon: 'sunny' }
+    ]);
+    installFakeGemini([metered(JSON.stringify(onCorridorCritical)), metered(corridorWeather)], calls);
+    try {
+      const analysis = await analyzeRoute('Origin', 'Destination', '1,1', '2,2', { useTolls: true });
+      assert.equal(analysis.criticalPoints?.length, 1);
+      assert.equal(analysis.criticalPoints?.[0]?.routeVerification?.status, 'corridor_candidate');
+      assert.equal(analysis.criticalPoints?.[0]?.incident.description, 'Dağ geçidi');
+      assert.deepEqual(analysis.weather.waypoints?.map(point => point.location), ['Bolu']);
+      assert.deepEqual(analysis.routeSchematic?.nodes.map(node => node.type), ['origin', 'destination']);
+      assert.equal(calls.length, 2);
+    } finally { restoreFetch(); }
+  });
+});
+
+test('off-corridor Gemini critical points are omitted from the returned route warnings', async () => {
+  await withApiKey(async () => {
+    const calls: RequestParams[] = [];
+    const offRouteCritical = JSON.parse(critical);
+    offRouteCritical.criticalPoints.push({
+      ...offRouteCritical.criticalPoints[0], id: '2', timeOffsetHours: 4,
+      weather: { ...offRouteCritical.criticalPoints[0].weather, location: 'RemoteBreakPoint' },
+      incident: { type: 'break', description: 'Yapay mola noktası' }
+    });
+    const restoreFetch = installMapsFetch({
+      ...mapsPayload,
+      routes: [{ ...mapsPayload.routes[0], overview_polyline: { points: canonicalPolyline } }]
+    });
+    process.env.GOOGLE_MAPS_API_KEY = 'test-maps-key';
+    installFakeGemini([metered(JSON.stringify(offRouteCritical)), metered(weather)], calls);
+    try {
+      const analysis = await analyzeRoute('Origin', 'Destination', '1,1', '2,2', { useTolls: true });
+      assert.deepEqual(analysis.criticalPoints, []);
+      assert.deepEqual(analysis.riskIntensity, []);
+      assert.deepEqual(analysis.riskTypes, []);
+      assert.deepEqual(analysis.timeline.map(event => event.title), ['Origin', 'Destination']);
+      assert.deepEqual(analysis.routeSchematic?.nodes.map(node => node.type), ['origin', 'destination']);
+      assert.doesNotMatch(JSON.stringify(analysis), /Bolu|RemoteBreakPoint|Yapay mola noktası/);
+    } finally { restoreFetch(); }
   });
 });
 

@@ -9,16 +9,11 @@ import { analyzeRoute } from "@/services/geminiService";
 import type { RouteAnalysis } from "@/types";
 
 export const maxDuration = 300;
-const BUDGET_USD = 9;
 
 type RawRow = { originCity: string; originCounty?: string; destinationCity: string; destinationCounty?: string };
 type UsageEvent = Record<string, unknown>;
 
 const asNumber = (value: unknown) => typeof value === "number" && Number.isFinite(value) ? value : typeof value === "string" && value.trim() !== "" && Number.isFinite(Number(value)) ? Number(value) : null;
-const estimate = (name: string, fallback: number) => {
-  const value = asNumber(process.env[name]);
-  return value !== null && value >= 0 ? value : fallback;
-};
 const isRawRow = (value: unknown): value is RawRow => {
   if (!value || typeof value !== "object") return false;
   const row = value as Record<string, unknown>;
@@ -50,9 +45,8 @@ const restorePending = async (itemId: string, reason: string) => {
   return error;
 };
 
-const budgetGate = async (inputHash: string, operatorId: string, currentItemId: string) => {
+const duplicateBatchGate = async (inputHash: string, operatorId: string, currentItemId: string) => {
   const supabase = getSupabaseAdmin();
-  const estimates = { token: estimate("BENCHMARK_ESTIMATED_TOKEN_COST_USD", 0.5), search: estimate("BENCHMARK_ESTIMATED_SEARCH_COST_USD", 0.2), maps: estimate("BENCHMARK_ESTIMATED_MAPS_COST_USD", 0.01) };
   const { data: batches, error: batchesError } = await supabase.from("batches").select("id").eq("operator_id", operatorId).eq("input_hash", inputHash);
   if (batchesError) return { error: `STOP: cannot read benchmark batches (${batchesError.message})` };
   const batchIds = (batches ?? []).map((batch) => batch.id);
@@ -60,16 +54,7 @@ const budgetGate = async (inputHash: string, operatorId: string, currentItemId: 
   const { data: processing, error: processingError } = await supabase.from("batch_items").select("id").in("batch_id", batchIds).eq("status", "processing").neq("id", currentItemId);
   if (processingError) return { error: `STOP: cannot inspect uncertain items (${processingError.message})` };
   if ((processing ?? []).length) return { error: "STOP: an earlier item remains in an uncertain processing state" };
-  const { data: events, error: eventsError } = await supabase.from("generation_events")
-    .select("provider, token_cost_usd, search_cost_usd, maps_cost_usd").in("batch_id", batchIds);
-  if (eventsError) return { error: `STOP: cannot read cost telemetry (${eventsError.message})` };
-  for (const event of events ?? []) {
-    if (event.provider === "gemini" && (asNumber(event.token_cost_usd) === null || asNumber(event.search_cost_usd) === null)) return { error: "STOP: Gemini cost telemetry is missing or unknown" };
-    if (event.provider === "maps" && asNumber(event.maps_cost_usd) === null) return { error: "STOP: Maps cost telemetry is missing or unknown" };
-  }
-  const spent = (events ?? []).reduce((total, event) => total + (asNumber(event.token_cost_usd) ?? 0) + (asNumber(event.search_cost_usd) ?? 0) + (asNumber(event.maps_cost_usd) ?? 0), 0);
-  const projected = spent + estimates.token! + estimates.search! + estimates.maps!;
-  return projected >= BUDGET_USD ? { error: `STOP: projected benchmark cost $${projected.toFixed(4)} reaches the $${BUDGET_USD} limit` } : { spent, projected };
+  return {};
 };
 
 export async function POST(_: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -111,7 +96,7 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
     if (restoreError) return NextResponse.json({ error: restoreError.message }, { status: 500 });
     return NextResponse.json({ error: "STOP: benchmark input hash is missing" }, { status: 409 });
   }
-  const gate = await budgetGate(batch.input_hash, auth.userId, claimed.id);
+  const gate = await duplicateBatchGate(batch.input_hash, auth.userId, claimed.id);
   if ("error" in gate && gate.error) {
     const restoreError = await restorePending(claimed.id, gate.error);
     if (restoreError) return NextResponse.json({ error: restoreError.message }, { status: 500 });
@@ -148,24 +133,45 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
     const mapsCost = asNumber(event.mapsCostUsd ?? event.maps_cost_usd ?? estimatedCost.directionsUsd);
     if ((provider === "gemini" && (tokenCost === null || searchCost === null)) || (provider === "maps" && mapsCost === null)) unknownTelemetryCost = true;
     const routeSource = event.routeSource === "maps" ? "maps" : event.routeSource === "gemini_fallback" ? "gemini_fallback" : "unavailable";
-    const { error } = await supabase.from("generation_events").insert({ batch_id: batch.id, batch_item_id: claimed.id, report_id: report.id, attempt_id: attemptId, provider, stage: typeof event.stage === "string" ? event.stage.slice(0, 100) : "analysis", model: batch.model, outcome: event.outcome === "error" ? "error" : "ok", duration_ms: asNumber(event.durationMs ?? event.duration_ms), prompt_tokens: asNumber(event.promptTokens ?? event.prompt_tokens), candidate_tokens: asNumber(event.candidateTokens ?? event.candidate_tokens), thoughts_tokens: asNumber(event.thoughtsTokens ?? event.thoughts_tokens), cached_tokens: asNumber(event.cachedTokens ?? event.cached_tokens), tool_prompt_tokens: asNumber(event.toolPromptTokens ?? event.tool_prompt_tokens), search_query_count: asNumber(event.searchQueryCount ?? event.search_query_count), source_count: asNumber(event.sourceCount ?? event.source_count), token_cost_usd: tokenCost, search_cost_usd: searchCost, maps_cost_usd: mapsCost, route_source: routeSource, error_code: typeof event.errorCode === "string" ? event.errorCode.slice(0, 100) : null });
-    if (error) { telemetryFailure = error.message; throw new Error(`Telemetry write failed: ${error.message}`); }
-    telemetryWrites += 1;
+    try {
+      const { error } = await supabase.from("generation_events").insert({ batch_id: batch.id, batch_item_id: claimed.id, report_id: report.id, attempt_id: attemptId, provider, stage: typeof event.stage === "string" ? event.stage.slice(0, 100) : "analysis", model: batch.model, outcome: event.outcome === "error" ? "error" : "ok", duration_ms: asNumber(event.durationMs ?? event.duration_ms), prompt_tokens: asNumber(event.promptTokens ?? event.prompt_tokens), candidate_tokens: asNumber(event.candidateTokens ?? event.candidate_tokens), thoughts_tokens: asNumber(event.thoughtsTokens ?? event.thoughts_tokens), cached_tokens: asNumber(event.cachedTokens ?? event.cached_tokens), tool_prompt_tokens: asNumber(event.toolPromptTokens ?? event.tool_prompt_tokens), search_query_count: asNumber(event.searchQueryCount ?? event.search_query_count), source_count: asNumber(event.sourceCount ?? event.source_count), token_cost_usd: tokenCost, search_cost_usd: searchCost, maps_cost_usd: mapsCost, route_source: routeSource, error_code: typeof event.errorCode === "string" ? event.errorCode.slice(0, 100) : null });
+      if (error) throw new Error(error.message);
+      telemetryWrites += 1;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown telemetry persistence error";
+      telemetryFailure ??= message;
+      console.error("[batch-telemetry] Usage event persistence failed; no retry was made.", {
+        batchId: batch.id, batchItemId: claimed.id, reportId: report.id,
+        attemptId, provider, stage: event.stage, error: message
+      });
+    }
   };
 
   try {
     const options = { useTolls: batch.use_tolls, departureTime: batch.departure_time ?? undefined, model: batch.model, onUsage };
     const analysis: RouteAnalysis = sanitizeAnalysis(await analyzeRoute(originLabel, destinationLabel, originCoords, destCoords, options));
-    if (telemetryWrites === 0) throw new Error("STOP: paid-call telemetry is missing");
-    if (telemetryFailure) throw new Error(`STOP: telemetry persistence failed (${telemetryFailure})`);
-    if (unknownTelemetryCost) throw new Error("STOP: paid-call cost telemetry is missing or unknown");
     const { error: reportUpdateError } = await supabase.from("reports").update({ analysis, status: "ready", error_message: null }).eq("id", report.id).eq("operator_id", auth.userId);
     if (reportUpdateError) throw new Error(reportUpdateError.message);
     const { error: itemUpdateError } = await supabase.from("batch_items").update({ status: "ready", report_id: report.id, error_message: null }).eq("id", claimed.id).eq("status", "processing");
     if (itemUpdateError) throw new Error(itemUpdateError.message);
     const finishError = await finishBatchIfSettled(batch.id);
     if (finishError) throw new Error(finishError.message);
-    return NextResponse.json({ processed: true, itemId: claimed.id, reportId: report.id, spent: gate.spent, projected: gate.projected });
+    const telemetryWarning = telemetryFailure
+      ? "Rapor oluşturuldu; ancak kullanım telemetrisi kaydedilemedi. Kullanım ayrıntıları eksik olabilir."
+      : telemetryWrites === 0
+        ? "Rapor oluşturuldu; ancak kullanım telemetrisi alınamadı."
+        : undefined;
+    return NextResponse.json({
+      processed: true,
+      itemId: claimed.id,
+      reportId: report.id,
+      telemetry: {
+        eventCount: telemetryWrites,
+        persistenceFailed: Boolean(telemetryFailure),
+        costKnown: telemetryWrites > 0 && !unknownTelemetryCost && !telemetryFailure,
+        warning: telemetryWarning
+      }
+    });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Analysis failed";
     const { error: reportUpdateError } = await supabase.from("reports").update({ status: "failed", error_message: message }).eq("id", report.id).eq("operator_id", auth.userId);
@@ -173,6 +179,15 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
     if (reportUpdateError || itemUpdateError) return NextResponse.json({ error: `STOP: processing state is uncertain (${reportUpdateError?.message || itemUpdateError?.message})` }, { status: 500 });
     const finishError = await finishBatchIfSettled(batch.id);
     if (finishError) return NextResponse.json({ error: finishError.message }, { status: 500 });
-    return NextResponse.json({ processed: true, itemId: claimed.id, status: "failed", error: telemetryFailure ?? message }, { status: 500 });
+    const telemetryWarning = telemetryFailure
+      ? "Kullanım telemetrisi kaydedilemedi; rapor hatası ayrıca gösteriliyor."
+      : undefined;
+    return NextResponse.json({
+      processed: true,
+      itemId: claimed.id,
+      status: "failed",
+      error: message,
+      telemetry: { persistenceFailed: Boolean(telemetryFailure), warning: telemetryWarning }
+    }, { status: 500 });
   }
 }

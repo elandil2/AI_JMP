@@ -6,7 +6,11 @@ import { authFetch } from "@/lib/apiClient";
 import { getSupabaseBrowserClient } from "@/lib/supabaseClient";
 
 type BatchItem = { id: string; row_index: number; raw_json: { originCity: string; originCounty?: string; destinationCity: string; destinationCounty?: string }; status: string; error_message?: string | null; attempt_count: number; route_source?: string | null; maps_error_code?: string | null };
-type BatchStatus = { batch: { id: string; status: string; model: string }; items: BatchItem[]; cost: { usd: number; unknown: boolean } };
+type BatchStatus = {
+  batch: { id: string; status: string; model: string };
+  items: BatchItem[];
+  usage: { available: boolean; costKnown: boolean; eventCount: number; failedEventCount: number; promptTokens: number; candidateTokens: number; unknownTokenEventCount: number };
+};
 
 const SAVED_BATCH_KEY = "jmp.batch.last-id";
 
@@ -23,6 +27,7 @@ export default function BatchUploadPage() {
   const [useTolls, setUseTolls] = useState(true);
   const [startTime, setStartTime] = useState("");
   const [model, setModel] = useState("gemini-2.5-flash");
+  const [telemetryWarning, setTelemetryWarning] = useState<string | null>(null);
 
   const loadBatch = useCallback(async (id: string, quiet = false) => {
     const response = await authFetch(`/api/reports/batch/${id}`);
@@ -63,7 +68,7 @@ export default function BatchUploadPage() {
 
   const submit = async () => {
     if (!csv.trim()) { setError("Lütfen bir CSV dosyası seçin."); return; }
-    setLoading(true); setError(null);
+    setLoading(true); setError(null); setTelemetryWarning(null);
     const response = await authFetch("/api/reports/batch", { method: "POST", body: JSON.stringify({ csv, fileName: file?.name, useTolls, departureTime: startTime ? new Date(startTime).toISOString() : null, model }) });
     const json = await response.json().catch(() => ({ error: "CSV yüklenemedi" }));
     setLoading(false);
@@ -76,11 +81,12 @@ export default function BatchUploadPage() {
 
   const processNext = async () => {
     if (!batchId) return;
-    setRunning(true); setError(null);
+    setRunning(true); setError(null); setTelemetryWarning(null);
     const response = await authFetch(`/api/reports/batch/${batchId}/next`, { method: "POST" });
     const json = await response.json().catch(() => ({ error: "Satır işlenemedi" }));
     setRunning(false);
     if (!response.ok) setError(json.error || "Satır işlenemedi");
+    if (typeof json.telemetry?.warning === "string") setTelemetryWarning(json.telemetry.warning);
     await loadBatch(batchId, true);
   };
 
@@ -101,7 +107,7 @@ export default function BatchUploadPage() {
         {error && <div role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</div>}
         <button onClick={() => void submit()} disabled={loading || !csv.trim()} className="min-h-11 rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white disabled:opacity-70">{loading ? "Kuyruk oluşturuluyor..." : "CSV kuyruğunu oluştur"}</button>
       </section>
-      {batch && <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-semibold text-slate-900">Batch: {batch.batch.id}</h2><p className="text-sm text-slate-600">Durum: {batch.batch.status} · Model: {batch.batch.model} · Çalışan maliyet: ${batch.cost.usd.toFixed(4)}{batch.cost.unknown ? " (BİLİNMİYOR — durduruldu)" : ""}</p></div><button onClick={() => void processNext()} disabled={running || !active || batch.cost.unknown} className="min-h-11 rounded-xl bg-slate-900 px-5 py-3 font-semibold text-white disabled:opacity-60">{running ? "Bir satır işleniyor..." : "Sonraki satırı işle"}</button></div><div className="overflow-x-auto rounded-xl border border-slate-200"><table className="w-full text-sm"><thead className="bg-slate-50 text-left text-slate-700"><tr><th className="p-2">Satır</th><th className="p-2">Rota</th><th className="p-2">Durum</th><th className="p-2">Kaynak</th><th className="p-2">Deneme</th><th className="p-2">Hata</th></tr></thead><tbody>{batch.items.map((item) => <tr key={item.id} className="border-t border-slate-100"><td className="p-2">{item.row_index + 1}</td><td className="p-2">{item.raw_json.originCity} → {item.raw_json.destinationCity}</td><td className="p-2">{item.status}</td><td className="p-2">{item.route_source === "maps" ? "Maps" : item.route_source === "gemini_fallback" ? "Gemini tahmini" : item.route_source === "unavailable" ? "Belirsiz" : "-"}{item.maps_error_code ? ` (Maps: ${item.maps_error_code})` : ""}</td><td className="p-2">{item.attempt_count}</td><td className="p-2 text-rose-700">{item.error_message || "-"}</td></tr>)}</tbody></table></div></section>}
+      {batch && <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-semibold text-slate-900">Batch: {batch.batch.id}</h2><p className="text-sm text-slate-600">Durum: {batch.batch.status} · Model: {batch.batch.model}</p><p className="mt-1 text-xs text-slate-500">Kullanım telemetrisi: {batch.usage.available ? batch.usage.costKnown ? batch.usage.eventCount ? "mevcut" : "henüz kayıt yok" : "eksik veya belirsiz" : "okunamadı"} · {batch.usage.eventCount} olay · sağlayıcı hatası: {batch.usage.failedEventCount} · giriş/çıkış tokenı: {batch.usage.promptTokens.toLocaleString("tr-TR")}/{batch.usage.candidateTokens.toLocaleString("tr-TR")}{batch.usage.unknownTokenEventCount ? ` (${batch.usage.unknownTokenEventCount} kayıtta token bilgisi eksik)` : ""}</p></div><button onClick={() => void processNext()} disabled={running || !active} className="min-h-11 rounded-xl bg-slate-900 px-5 py-3 font-semibold text-white disabled:opacity-60">{running ? "Bir satır işleniyor..." : "Sonraki satırı işle"}</button></div>{telemetryWarning && <div role="status" className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">{telemetryWarning}</div>}<div className="overflow-x-auto rounded-xl border border-slate-200"><table className="w-full text-sm"><thead className="bg-slate-50 text-left text-slate-700"><tr><th className="p-2">Satır</th><th className="p-2">Rota</th><th className="p-2">Durum</th><th className="p-2">Kaynak</th><th className="p-2">Deneme</th><th className="p-2">Hata</th></tr></thead><tbody>{batch.items.map((item) => <tr key={item.id} className="border-t border-slate-100"><td className="p-2">{item.row_index + 1}</td><td className="p-2">{item.raw_json.originCity} → {item.raw_json.destinationCity}</td><td className="p-2">{item.status}</td><td className="p-2">{item.route_source === "maps" ? "Maps" : item.route_source === "gemini_fallback" ? "Gemini tahmini" : item.route_source === "unavailable" ? "Belirsiz" : "-"}{item.maps_error_code ? ` (Maps: ${item.maps_error_code})` : ""}</td><td className="p-2">{item.attempt_count}</td><td className="p-2 text-rose-700">{item.error_message || "-"}</td></tr>)}</tbody></table></div></section>}
     </main>
   </div>;
 }

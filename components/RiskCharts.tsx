@@ -40,6 +40,14 @@ const renderCustomizedLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, per
 };
 
 export const RiskCharts: React.FC<RiskChartsProps> = ({ intensityData, typeData }) => {
+  if (!intensityData?.length && !typeData?.length) {
+    return (
+      <section className="rounded-xl border border-slate-200 bg-white px-5 py-4 text-slate-700" aria-label="Risk değerlendirmesi">
+        <h3 className="font-semibold text-slate-900">Rota bazlı risk puanı doğrulanmadı</h3>
+        <p className="mt-1 text-sm leading-6">Kaynağı ve gerçek güzergâh ilişkisi doğrulanmamış bölgeler için risk yüzdesi gösterilmiyor.</p>
+      </section>
+    );
+  }
   // Ensure we have colors for intensity data if the API didn't send them nicely
   const intensityWithColors = intensityData.map((d, i) => ({
     ...d,

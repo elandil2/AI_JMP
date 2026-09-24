@@ -42,6 +42,10 @@ export interface DirectionsOptions {
   onUsage?: (event: GenerationEvent) => Promise<void> | void;
 }
 
+export const MIN_TRUCK_PLANNING_SPEED_KMH = 60;
+export const MAX_TRUCK_PLANNING_SPEED_KMH = 65;
+export const DEFAULT_TRUCK_PLANNING_SPEED_KMH = 60;
+
 const emitUsage = async (callback: DirectionsOptions['onUsage'], event: GenerationEvent) => {
   if (callback) await callback(event);
 };
@@ -145,22 +149,33 @@ export async function getDirections(
 }
 
 /**
- * Calculate truck-adjusted duration
- * Trucks are slower than cars - apply 1 min/km rule for heavy vehicles
+ * Estimate truck driving time from route distance using a configurable average
+ * planning speed. This is not a vehicle-specific Google route or a legal/actual
+ * driver-hours calculation.
  */
-export function calculateTruckDuration(distanceMeters: number): {
+export function calculateTruckDuration(
+  distanceMeters: number,
+  planningSpeedKmh = DEFAULT_TRUCK_PLANNING_SPEED_KMH
+): {
   hours: number;
   text: string;
 } {
+  if (!Number.isFinite(distanceMeters) || distanceMeters < 0) {
+    throw new Error('Distance must be a non-negative number.');
+  }
+  if (!Number.isFinite(planningSpeedKmh) || planningSpeedKmh < MIN_TRUCK_PLANNING_SPEED_KMH || planningSpeedKmh > MAX_TRUCK_PLANNING_SPEED_KMH) {
+    throw new Error(`Truck planning speed must be between ${MIN_TRUCK_PLANNING_SPEED_KMH} and ${MAX_TRUCK_PLANNING_SPEED_KMH} km/h.`);
+  }
+
   const distanceKm = distanceMeters / 1000;
-  // Truck speed: ~1 min/km = 60 km/h average
-  const totalMinutes = distanceKm;
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = Math.round(totalMinutes % 60);
+  const hours = distanceKm / planningSpeedKmh;
+  const totalMinutes = Math.round(hours * 60);
+  const wholeHours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
 
   return {
-    hours: totalMinutes / 60,
-    text: `${hours} sa ${minutes} dk`,
+    hours,
+    text: `${wholeHours} sa ${minutes} dk`,
   };
 }
 

@@ -6,6 +6,7 @@ import { Navigation, Share2, Printer, Link as LinkIcon } from "lucide-react";
 import { authFetch } from "@/lib/apiClient";
 import Header from "@/components/Header";
 import { SummaryCards } from "@/components/SummaryCards";
+import { SourceCoverageNotice } from "@/components/SourceCoverageNotice";
 import { RiskCharts } from "@/components/RiskCharts";
 import { CriticalPointsTable } from "@/components/CriticalPointsTable";
 import { RouteSchematic } from "@/components/RouteSchematic";
@@ -195,6 +196,7 @@ export default function OperatorReportPage() {
               <div className="space-y-8">
                 {/* Summary Cards - Moved to top as requested */}
                 <SummaryCards data={report.analysis.summary} weather={report.analysis.weather} />
+                <SourceCoverageNotice summary={report.analysis.summary} />
 
                 {/* Risk Charts */}
                 <RiskCharts intensityData={report.analysis.riskIntensity} typeData={report.analysis.riskTypes} />

@@ -107,14 +107,16 @@ export function validateWeatherResults(value: unknown): WeatherInfo[] {
 }
 
 export function validateCriticalAnalysis(value: unknown): UnknownRecord {
-  if (!isRecord(value) || !hasItems(value.riskIntensity) || !hasItems(value.timeline) || !hasItems(value.criticalPoints)) {
+  if (!isRecord(value) || !Array.isArray(value.criticalPoints) ||
+      (value.riskIntensity !== undefined && !Array.isArray(value.riskIntensity)) ||
+      (value.timeline !== undefined && !Array.isArray(value.timeline))) {
     throw new Error('Gemini critical analysis response has an invalid shape.');
   }
-  value.riskIntensity.forEach((item, index) => {
+  (value.riskIntensity ?? []).forEach((item, index) => {
     if (!isRecord(item) || !isNonEmptyString(item.name) || !isNumber(item.value) || item.value < 0 || item.value > 100) throw new Error(`riskIntensity[${index}] requires a region name and a score between 0 and 100.`);
     if (!isNonEmptyString(item.color) || !/^#[0-9a-f]{3,8}$/i.test(item.color)) item.color = '#64748b';
   });
-  value.timeline.forEach((item, index) => {
+  (value.timeline ?? []).forEach((item, index) => {
     if (!isRecord(item)) throw new Error(`timeline[${index}] must be an object.`);
     const title = item.title ?? item.name ?? item.label;
     const description = item.description ?? item.detail ?? item.text;

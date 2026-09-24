@@ -9,6 +9,7 @@ export interface SummaryStats {
   breakDuration?: string;
   durationLabel?: string;
   routeNotice?: string;
+  sourceCoverage?: 'unverified' | 'verified';
   generatedAt?: string;
 }
 
@@ -69,6 +70,12 @@ export interface RouteAnalysis {
 export interface CriticalPoint {
   id: string;
   coordinate: string; // lat,lng
+  /** Proximity to the in-memory Maps line is not proof of the place name or an incident. */
+  routeVerification?: {
+    status: 'corridor_candidate' | 'off_corridor' | 'unverified';
+    distanceKm?: number;
+    progress?: number;
+  };
   timeOffsetHours?: number; // Estimated hours from start to reach this point
   weather: WeatherInfo;
   traffic: {

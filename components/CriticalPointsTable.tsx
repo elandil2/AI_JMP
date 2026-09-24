@@ -41,6 +41,11 @@ export const CriticalPointsTable: React.FC<CriticalPointsTableProps> = ({ points
                                 <div className="flex flex-col">
                                     <span className="font-bold text-slate-800">{point.weather.location}</span>
                                     <span className="text-[10px] text-slate-400 font-mono">{point.coordinate}</span>
+                                    <span className="mt-1 text-xs text-amber-800">
+                                        {point.routeVerification?.status === 'corridor_candidate'
+                                            ? 'Rota koridoruna yakın; aynı yol ve yön doğrulanmadı.'
+                                            : 'Rota ilişkisi doğrulanmadı.'}
+                                    </span>
                                 </div>
                             </td>
 
@@ -88,6 +93,9 @@ export const CriticalPointsTable: React.FC<CriticalPointsTableProps> = ({ points
                                         <div className={`font-bold ${point.incident.type === 'accident' ? 'text-rose-600' : 'text-slate-700'}`}>
                                             {point.incident.description}
                                         </div>
+                                        {!point.incident.source && ['accident', 'roadwork', 'hazard', 'closure'].includes(point.incident.type) && (
+                                            <p className="mt-1 text-xs font-medium text-amber-800">Bu olay için doğrulanmış kaynak bağlantısı yok.</p>
+                                        )}
                                         {point.incident.source && (
                                             <div className="text-[10px] text-slate-400 mt-1 uppercase tracking-wide">
                                                 Kaynak: {point.incident.source}

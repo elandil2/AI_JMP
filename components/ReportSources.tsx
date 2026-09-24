@@ -33,7 +33,7 @@ export function ReportSources({ sources = [] }: { sources?: GroundingChunk[] }) 
       <h3 className="font-semibold text-slate-800">Rapor kaynakları</h3>
       <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold tabular-nums text-slate-600" aria-label={`${links.length} kaynak`}>{links.length}</span>
     </div>
-    <p className="mt-1 text-sm text-slate-600">Rapor oluşturulurken bulunan kaynaklar. Yol ve hava koşulları değişebilir.</p>
+    <p className="mt-1 text-sm text-slate-600">Bunlar modelin aramasında bulunan bağlantılardır. Her uyarıyı kanıtladıkları veya zorunlu yol kaynaklarının tamamının kontrol edildiği anlamına gelmez.</p>
     {links.length ? <div className="mt-4 space-y-2">
       {renderLinks(0, 4)}
       {links.length > 4 && <details className="group/sources rounded-lg border border-slate-200">

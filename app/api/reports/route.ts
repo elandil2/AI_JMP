@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
-import { recordReportUsage } from "@/lib/generationTelemetry";
+import { isUsageCostKnown, recordReportUsage } from "@/lib/generationTelemetry";
 import { requireAuth } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { findLocation } from "@/lib/location";
@@ -123,12 +123,20 @@ export async function POST(req: Request) {
 
   try {
     const attemptId = randomUUID();
+    let telemetryEventCount = 0;
+    let telemetryPersistenceFailed = false;
+    let unknownCost = false;
     const rawAnalysis: RouteAnalysis = await analyzeRoute(originLabel, destLabel, originCoords, destCoords, {
       useTolls,
       stopName: stopName || undefined,
       stopCoords,
       departureTime: departure.toISOString(),
-      onUsage: event => recordReportUsage(inserted.id, attemptId, event)
+      onUsage: async event => {
+        telemetryEventCount += 1;
+        if (!isUsageCostKnown(event)) unknownCost = true;
+        const result = await recordReportUsage(inserted.id, attemptId, event);
+        if (!result.persisted) telemetryPersistenceFailed = true;
+      }
     });
     const analysis = sanitizeAnalysis(rawAnalysis);
 
@@ -142,7 +150,21 @@ export async function POST(req: Request) {
       .eq("id", inserted.id);
     if (saveError) throw new Error('Rapor sonucu kaydedilemedi.');
 
-    return NextResponse.json({ id: inserted.id, publicSlug, analysis });
+    return NextResponse.json({
+      id: inserted.id,
+      publicSlug,
+      analysis,
+      telemetry: {
+        eventCount: telemetryEventCount,
+        persistenceFailed: telemetryPersistenceFailed,
+        costKnown: telemetryEventCount > 0 && !unknownCost && !telemetryPersistenceFailed,
+        warning: telemetryPersistenceFailed
+          ? "Rapor oluşturuldu; ancak kullanım telemetrisi kaydedilemedi. Kullanım ayrıntıları eksik olabilir."
+          : telemetryEventCount === 0
+            ? "Rapor oluşturuldu; ancak kullanım telemetrisi alınamadı."
+            : undefined
+      }
+    });
   } catch (err: any) {
     await supabase
       .from("reports")

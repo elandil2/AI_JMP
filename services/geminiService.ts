@@ -2,6 +2,7 @@ import { GoogleGenAI } from '@google/genai';
 import type { CriticalPoint, GenerationEvent, GenerationTokens, GroundingChunk, RouteAnalysis, RouteOptions } from '../types';
 import { getDirections, type DirectionsResult } from '../lib/googleMaps';
 import { mapsTiming, reconcileSchematic } from '../lib/routeTiming';
+import { checkCoordinateAgainstRoute, ROUTE_CORRIDOR_TOLERANCE_KM } from '../lib/routeGeometry';
 import type { SummaryStats } from '../types';
 import { resolveGeminiModel, type GeminiModel } from '../lib/aiModels';
 import { parseJsonResponse, validateCriticalAnalysis, validateRouteFallback, validateWeatherResults } from '../lib/analysisValidation';
@@ -145,7 +146,10 @@ const routeAgent = async (ai: GeminiClient, model: GeminiModel, origin: string, 
   }
   if (mapsData) {
     const timing = mapsTiming(mapsData);
-    return { totalDistance: timing.summary.totalDistance, estimatedDuration: timing.summary.estimatedDuration, routeDescription: `${origin} → ${destination}. Güzergah: ${mapsData.summary}`, estimatedArrivalHours: timing.totalHours, summary: timing.summary };
+    const stride = Math.max(1, Math.ceil(mapsData.steps.length / 40));
+    const routeSteps = mapsData.steps.filter((_, index) => index % stride === 0)
+      .map(step => step.instruction).filter(Boolean).join(' · ').slice(0, 3500);
+    return { totalDistance: timing.summary.totalDistance, estimatedDuration: timing.summary.estimatedDuration, routeDescription: `${origin} → ${destination}. Google Maps otomobil yolu: ${mapsData.summary}. Yol adımları: ${routeSteps}`, estimatedArrivalHours: timing.totalHours, summary: timing.summary, mapsPolyline: mapsData.polyline };
   }
   const prompt = `
     GÖREV: Tır Rota Hesabı.
@@ -158,7 +162,7 @@ const routeAgent = async (ai: GeminiClient, model: GeminiModel, origin: string, 
   const summary: SummaryStats = { totalDistance: result.data.totalDistance, estimatedDuration: result.data.estimatedDuration,
     mandatoryBreak: 'Doğrulanamadı', breakNote: 'Maps rota hesabı alınamadı. Süre ve mola planı doğrulanamadı.',
     durationLabel: 'AI süre tahmini — doğrulanmadı', routeNotice: 'Google Maps rota verisi alınamadı. Mesafe, süre ve güzergâh AI tahminidir; tır rotası olarak doğrulanmamıştır.', generatedAt: new Date().toISOString() };
-  return { ...result.data, summary };
+  return { ...result.data, summary, mapsPolyline: undefined };
 };
 
 const weatherAgent = async (ai: GeminiClient, model: GeminiModel, locations: { name: string; role: 'origin' | 'destination' | 'waypoint'; timeOffset: number }[], options?: RouteOptions) => {
@@ -180,26 +184,20 @@ const weatherAgent = async (ai: GeminiClient, model: GeminiModel, locations: { n
 
 const criticalAnalysisAgent = async (ai: GeminiClient, model: GeminiModel, routeDescription: string, origin: string, destination: string, durationHours: number, summary: SummaryStats, options?: RouteOptions) => {
   const prompt = `
-    GÖREV: Tır rotası için Kapsamlı Risk ve Kritik Nokta Analizi.
+    GÖREV: Aşağıdaki Google Maps otomobil rotası yakınındaki güncel yol uyarısı adaylarını araştır.
     ROTA: ${origin} -> ${destination}
     GÜZERGAH DETAYI: ${routeDescription}
     SÜRE: ${durationHours.toFixed(1)} saat
     HESAPLANMIŞ PLAN: ${JSON.stringify(summary)}
     HAREKET: ${options?.departureTime ?? new Date().toISOString()}. Saat dilimi Europe/Istanbul.
-    EK KAYNAKLAR: https://yol.kgm.gov.tr/KazaKaraNoktaWeb/ (Kaza Kara Noktaları) verisine benzer verileri ara.
-    ARAÇLAR: Google Search ile trafik, yol çalışmaları, kaza kara noktaları ve hava durumu uyarılarını ara.
-    Yalnızca geçerli bir JSON nesnesi döndür; aşağıdaki alan adlarını değiştirme.
-    riskIntensity: en az bir bölge; name, 0-100 arası sayısal value, #RRGGBB color.
-    timeline: başlangıç, yol üzerindeki önemli noktalar, planlı mola ve varış. Her elemanda id, title, description, type zorunlu. type yalnızca start/info/warning/danger/break/end/stop. Icon yalnızca görseldir.
-    criticalPoints: en az bir anlamlı rota noktası. Her elemanda id, coordinate (enlem,boylam), sayısal timeOffsetHours, weather, traffic, incident.
+    Google Search ile erişebildiğin kaynakları araştır. Bu arama zorunlu kaynakların tamamının kontrol edildiği anlamına gelmez.
+    Yalnızca {"criticalPoints": [...]} biçiminde geçerli JSON döndür. Doğrulanabilir bir aday bulamazsan criticalPoints boş dizi olsun; örnek nokta, rastgele risk yüzdesi veya mola noktası üretme.
+    Her adayda id, coordinate (enlem,boylam), sayısal timeOffsetHours, weather, traffic ve incident olsun.
     weather: location, temp (Celsius metni veya "-"), condition, icon (sunny/cloudy/rainy/storm/snow/fog/unknown).
     traffic: status (fluid/moderate/heavy/stopped/unknown), description, varsa tollInfo.
-    incident: type (accident/roadwork/none/weather/break/traffic/hazard/closure/speed/tunnel/info/warning), description, varsa doğrulanmış source URL'si.
-    routeSchematic: nodes dizisi; her düğüm name, type (origin/destination/stop/break/critical), distanceFromStart (km), timeFromStart ("3 sa 15 dk"). Düğümler zaman sırasıyla, varış en sonda olsun.
-    Tüm varış/ara nokta saatleri HESAPLANMIŞ PLAN ile uyumlu olmalı; toplam süreyi yeniden hesaplama. timeOffsetHours mola dahil kalkıştan itibaren geçen süredir, ${durationHours.toFixed(2)} saati aşamaz.
-    Güncel yol çalışması veya kaza doğrulanamıyorsa açıkça "Güncel bilgi doğrulanamadı" yaz; olasılığı kesin olay gibi sunma. Harita tır kısıtlarını doğrulamıyor; tır için güvenli/yasal güzergâh garantisi verme.
-    ÖRNEK YAPI (içeriği gerçek rota için doldur):
-    { "riskIntensity": [{"name":"Bölge","value":50,"color":"#f59e0b"}], "timeline": [{"id":"1","title":"Başlangıç","description":"Kalkış","type":"start"}], "criticalPoints": [{"id":"1","coordinate":"39.9334,32.8597","timeOffsetHours":1,"weather":{"location":"Bölge","temp":"-","condition":"Hava durumu doğrulanamadı","icon":"unknown"},"traffic":{"status":"unknown","description":"Güncel bilgi doğrulanamadı"},"incident":{"type":"info","description":"Güncel bilgi doğrulanamadı"}}], "routeSchematic":{"nodes":[{"name":"Başlangıç","type":"origin","distanceFromStart":"0 km","timeFromStart":"0 sa 0 dk"}],"totalDistance":"${summary.totalDistance}","totalDuration":"${summary.estimatedDuration}"} }
+    incident: type (accident/roadwork/traffic/hazard/closure/info/warning), description ve bulduysan doğrudan source URL'si.
+    Sadece gerçek rotaya ilişkin uyarı adaylarını ekle. timeOffsetHours mola dahil kalkıştan itibaren geçen süredir, ${durationHours.toFixed(2)} saati aşamaz.
+    Kaynağı, olay zamanı veya rota ilişkisi belirsizse kesin olay iddiası yazma. Harita tır kısıtlarını doğrulamıyor.
   `;
   return generateWithTelemetry(ai, { model, contents: prompt, config: { tools: [{ googleSearch: {} }] } }, 'critical', model, validateCriticalAnalysis, options);
 };
@@ -213,8 +211,16 @@ export const analyzeRoute = async (originName: string, destinationName: string, 
   const criticalResult = await criticalAnalysisAgent(ai, model, routeData.routeDescription, originName, destinationName, routeData.estimatedArrivalHours, routeData.summary, options);
   const analysis = criticalResult.data;
   const criticalPoints = analysis.criticalPoints as CriticalPoint[];
+  // Every Gemini point is checked, including points whose incident type is "break".
+  // Proximity only makes it a corridor candidate; it does not validate the place name or incident.
+  const assessedPoints = criticalPoints.map(point => {
+    const routeVerification = checkCoordinateAgainstRoute(routeData.mapsPolyline, point.coordinate);
+    return { ...point, routeVerification };
+  });
+  const routeCheckedPoints = assessedPoints.filter(point => point.routeVerification.status !== 'off_corridor');
+  const routeGeometryAvailable = assessedPoints.some(point => point.routeVerification.status !== 'unverified');
   const locations: { name: string; role: 'origin' | 'destination' | 'waypoint'; timeOffset: number }[] = [{ name: originName, role: 'origin', timeOffset: 0 }];
-  criticalPoints.forEach(point => locations.push({ name: point.weather.location, role: 'waypoint', timeOffset: point.timeOffsetHours ?? routeData.estimatedArrivalHours / 2 }));
+  routeCheckedPoints.forEach(point => locations.push({ name: point.weather.location, role: 'waypoint', timeOffset: point.timeOffsetHours ?? routeData.estimatedArrivalHours / 2 }));
   locations.push({ name: destinationName, role: 'destination', timeOffset: routeData.estimatedArrivalHours });
   const weatherResult = await weatherAgent(ai, model, locations, options);
   const weatherResults = weatherResult.data;
@@ -223,12 +229,31 @@ export const analyzeRoute = async (originName: string, destinationName: string, 
   const unknownWeather = (location: string) => ({ location, temp: '-', condition: 'Hava durumu doğrulanamadı', icon: 'unknown' as const });
   const weatherOrigin = findWeather(originName) ?? unknownWeather(originName);
   const weatherDestination = findWeather(destinationName) ?? unknownWeather(destinationName);
+  const corridorCandidateWeatherKeys = new Set(routeCheckedPoints
+    .filter(point => point.routeVerification.status === 'corridor_candidate')
+    .map(point => locationKey(point.weather.location)));
   return {
-    summary: routeData.summary,
-    weather: { origin: { ...weatherOrigin, location: originName }, destination: { ...weatherDestination, location: destinationName }, waypoints: weatherResults.filter(weather => locationKey(weather.location) !== locationKey(originName) && locationKey(weather.location) !== locationKey(destinationName)) },
-    riskIntensity: analysis.riskIntensity as RouteAnalysis['riskIntensity'], riskTypes: (analysis.riskTypes ?? []) as RouteAnalysis['riskTypes'], timeline: analysis.timeline as RouteAnalysis['timeline'],
-    criticalPoints: criticalPoints.map(point => ({ ...point, weather: findWeather(point.weather.location) ?? point.weather })),
-    routeSchematic: reconcileSchematic(analysis.routeSchematic as RouteAnalysis['routeSchematic'], originName, destinationName, routeData.summary, routeData.estimatedArrivalHours),
+    summary: {
+      ...routeData.summary,
+      sourceCoverage: 'unverified',
+      routeNotice: `${routeData.summary.routeNotice ?? ''} Zorunlu kaza ve yol çalışması kaynakları bu raporda tek tek doğrulanmadı; uyarı bulunmaması olay olmadığı anlamına gelmez. ${routeGeometryAvailable ? `Maps çizgisine ${ROUTE_CORRIDOR_TOLERANCE_KM} km içinde olan Gemini koordinatları yalnızca rota koridoru adayıdır; yer adı ve olay doğrulanmış değildir. Koridor dışındaki noktalar rapordan çıkarıldı.` : 'Maps çizgi geometrisi doğrulanamadı; Gemini koordinatları rotaya göre doğrulanmamıştır.'} Koordinatsız Gemini risk bölgeleri kullanılmadı; rota şeması yalnızca başlangıç ve varışı gösterir.`.trim()
+    },
+    weather: {
+      origin: { ...weatherOrigin, location: originName }, destination: { ...weatherDestination, location: destinationName },
+      waypoints: weatherResults.filter(weather => corridorCandidateWeatherKeys.has(locationKey(weather.location)) && locationKey(weather.location) !== locationKey(originName) && locationKey(weather.location) !== locationKey(destinationName))
+    },
+    riskIntensity: [], riskTypes: [],
+    timeline: [
+      { id: 'route-origin', title: originName, description: 'Google Maps rota başlangıcı.', type: 'start' },
+      ...routeCheckedPoints.filter(point => point.routeVerification.status === 'corridor_candidate').map((point, index) => ({
+        id: `route-candidate-${index + 1}`, title: `${point.weather.location} — rota koridoru adayı`,
+        description: 'Koordinat Maps hattına yakındır. Yer adı, olay ve uyarı kaynağı doğrulanmamıştır.', type: 'info' as const
+      })),
+      { id: 'route-destination', title: destinationName, description: 'Google Maps rota varışı.', type: 'end' }
+    ],
+    criticalPoints: routeCheckedPoints.map(point => ({ ...point, weather: findWeather(point.weather.location) ?? point.weather })),
+    // Gemini's schematic nodes contain no coordinates, so their city, distance, and timing cannot be verified against Maps.
+    routeSchematic: reconcileSchematic(undefined, originName, destinationName, routeData.summary, routeData.estimatedArrivalHours),
     groundingMetadata: dedupeGroundingChunks([...criticalResult.sources, ...weatherResult.sources])
   };
 };

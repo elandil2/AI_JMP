@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth";
+import { summarizeUsageTelemetry } from "@/lib/generationTelemetry";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
-
-const asNumber = (value: unknown) => typeof value === "number" ? value : typeof value === "string" && value.trim() !== "" && Number.isFinite(Number(value)) ? Number(value) : null;
 
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireAuth();
@@ -29,15 +28,14 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
 
   const { data: events, error: eventsError } = await supabase
     .from("generation_events")
-    .select("batch_item_id, provider, stage, outcome, route_source, error_code, token_cost_usd, search_cost_usd, maps_cost_usd")
+    .select("batch_item_id, provider, stage, outcome, route_source, error_code, token_cost_usd, search_cost_usd, maps_cost_usd, prompt_tokens, candidate_tokens")
     .eq("batch_id", batch.id);
-  if (eventsError) return NextResponse.json({ error: eventsError.message }, { status: 500 });
-  const unknownCost = (events ?? []).some((event) =>
-    event.provider === "gemini"
-      ? asNumber(event.token_cost_usd) === null || asNumber(event.search_cost_usd) === null
-      : asNumber(event.maps_cost_usd) === null
-  );
-  const cost = (events ?? []).reduce((total, event) => total + (asNumber(event.token_cost_usd) ?? 0) + (asNumber(event.search_cost_usd) ?? 0) + (asNumber(event.maps_cost_usd) ?? 0), 0);
+  if (eventsError) {
+    console.error("[batch-telemetry] Usage diagnostics could not be read.", { batchId: batch.id, error: eventsError.message });
+  }
+  const usage = summarizeUsageTelemetry(events ?? [], (items ?? [])
+    .filter((item) => item.status === "ready")
+    .map((item) => item.id));
 
   const enrichedItems = (items ?? []).map((item) => {
     const itemEvents = (events ?? []).filter((event) => event.batch_item_id === item.id);
@@ -46,5 +44,17 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
     const routeSource = mapsEvent?.outcome === "ok" ? "maps" : fallbackEvent?.outcome === "ok" ? "gemini_fallback" : mapsEvent ? "unavailable" : null;
     return { ...item, route_source: routeSource, maps_error_code: mapsEvent?.outcome === "error" ? mapsEvent.error_code : null };
   });
-  return NextResponse.json({ batch, items: enrichedItems, cost: { usd: cost, unknown: unknownCost } });
+  return NextResponse.json({
+    batch,
+    items: enrichedItems,
+    usage: {
+      available: !eventsError,
+      costKnown: !usage.unknownCost && !eventsError,
+      eventCount: usage.eventCount,
+      failedEventCount: usage.failedEventCount,
+      promptTokens: usage.promptTokens,
+      candidateTokens: usage.candidateTokens,
+      unknownTokenEventCount: usage.unknownTokenEventCount
+    }
+  });
 }
