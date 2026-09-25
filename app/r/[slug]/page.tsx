@@ -170,7 +170,7 @@ export default function PublicReportPage() {
                   </section>
                 )}
 
-                <ReportSources sources={report.analysis.groundingMetadata} />
+                <ReportSources sources={report.analysis.groundingMetadata} routeSchematic={report.analysis.routeSchematic} />
 
                 {/* Bottom Navigation Button */}
                 <div className="pt-8 pb-12 flex justify-center">

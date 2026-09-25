@@ -227,7 +227,7 @@ export default function OperatorReportPage() {
                   </section>
                 )}
 
-                <ReportSources sources={report.analysis.groundingMetadata} />
+                <ReportSources sources={report.analysis.groundingMetadata} routeSchematic={report.analysis.routeSchematic} />
               </div>
             )}
           </div>

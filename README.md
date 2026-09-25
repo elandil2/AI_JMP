@@ -30,6 +30,8 @@ Normal kullanımın varsayılan modeli **Gemini 3.7 Flash**. 2.5 ve 3.8 yönetic
 
 Mapbox'ın aynı mevcut rota çağrısından trafik seviyesi bilinen kilometre/pay da hesaplanır. Bu **Mapbox otomobil rotasının ölçüm kapsamıdır**, Google hattındaki kaza veya yol çalışması yoğunluğu değildir. 25 Eylül tarihli dokuz geçmiş Menemen varışı ölçümü [kapsama denetiminde](docs/MAPBOX_TRAFIK_KAPSAMA_2026-09-25.md) tutulur.
 
+Kaynak paneli, Google Maps şemasından çıkarılan yol kodlarını (`D300`, `O-21` gibi) KGM/e-Devlet sorgularında **elle kontrol için ipucu** olarak gösterir. Bunlar KGM kontrol kesim numarası ya da raporda doğrulanmış yol çalışması değildir.
+
 ## Teknik özet
 
 Next.js 15, React 19, TypeScript, Supabase Auth/veritabanı ve Google Gemini (`@google/genai`). Kesin bağımlılık çözümlemesi `package-lock.json` içindedir.

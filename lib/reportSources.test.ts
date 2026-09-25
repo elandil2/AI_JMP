@@ -15,18 +15,18 @@ test('source cards filter unsafe URLs, deduplicate URLs, and retain both source 
     { web: { uri: 'https://example.com/a' } },
     { web: {}, maps: { uri: 'https://example.com/map' } }
   ]);
-  assert.equal((html.match(/<a /g) ?? []).length, 5);
-  assert.match(html, /aria-label="3 kaynak"/);
+  assert.equal((html.match(/<a /g) ?? []).length, 7);
+  assert.match(html, /aria-label="3 model arama kaynağı"/);
   assert.ok(!html.includes('javascript:'));
   assert.ok(!html.includes('<script>'));
   assert.match(html, /&lt;script&gt;test&lt;\/script&gt;/);
-  assert.equal((html.match(/rel="noopener noreferrer"/g) ?? []).length, 5);
+  assert.equal((html.match(/rel="noopener noreferrer"/g) ?? []).length, 7);
   assert.ok(!html.includes('<details'));
 });
 
 test('source preview shows four links and preserves more than sixteen through native disclosure', () => {
   const html = render(Array.from({ length: 20 }, (_, index) => ({ web: { uri: `https://example.com/${index}`, title: 'Same title' } })));
-  assert.match(html, /aria-label="20 kaynak"/);
+  assert.match(html, /aria-label="20 model arama kaynağı"/);
   const [preview, disclosure] = html.split('<details');
   assert.equal((preview.match(/<a /g) ?? []).length, 4);
   assert.equal((disclosure.split('</details>')[0].match(/<a /g) ?? []).length, 16);
@@ -38,8 +38,22 @@ test('source preview shows four links and preserves more than sixteen through na
 test('empty and invalid sources retain the honest empty state', () => {
   const html = render([{ web: { uri: 'data:text/html,hello' } }]);
   assert.match(html, /Bu kayıtta modelin kullandığı aramaya ait kaynak bağlantısı bulunmuyor/);
-  assert.match(html, /aria-label="0 kaynak"/);
-  assert.equal((html.match(/<a /g) ?? []).length, 2);
+  assert.match(html, /aria-label="0 model arama kaynağı"/);
+  assert.equal((html.match(/<a /g) ?? []).length, 4);
   assert.match(html, /KGM çalışma yapılan yollar/);
+  assert.match(html, /e-Devlet trafiğe kapalı yol sorgulama/);
   assert.ok(!html.includes('<details'));
+});
+
+test('route-specific road codes appear as manual search hints, not verified warnings', () => {
+  const html = renderToStaticMarkup(React.createElement(ReportSources, {
+    sources: [], routeSchematic: { totalDistance: '100 km', totalDuration: '2 sa', nodes: [
+      { name: 'D300 / E96', type: 'origin', distanceFromStart: '0 km', timeFromStart: '0 sa' },
+      { name: 'O-21', type: 'destination', distanceFromStart: '100 km', timeFromStart: '2 sa' }
+    ] }
+  }));
+  assert.match(html, /Kontrol edilecek yol kodları/);
+  assert.match(html, /D300/);
+  assert.match(html, /O-21/);
+  assert.match(html, /KGM kontrol kesim numarası değildir/);
 });
