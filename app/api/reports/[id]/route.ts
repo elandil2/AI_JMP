@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { requireAuth } from "@/lib/auth";
+import { timelineForDisplay } from "@/lib/routeTimelineBuilder";
+import type { RouteAnalysis } from "@/types";
 
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireAuth();
@@ -22,7 +24,11 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   if (!data) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  return NextResponse.json({ report: data });
+  const analysis = data.analysis as RouteAnalysis | null;
+  return NextResponse.json({ report: {
+    ...data,
+    analysis: analysis ? { ...analysis, timeline: timelineForDisplay(analysis, data.departure_time ?? undefined) } : analysis
+  } });
 }
 
 export async function DELETE(_: Request, { params }: { params: Promise<{ id: string }> }) {

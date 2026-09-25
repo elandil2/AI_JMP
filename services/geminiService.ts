@@ -12,6 +12,7 @@ import { reverseGeocodeRouteCheckpoints } from '../lib/mapboxGeocoding';
 import { retrieveMapboxDrivingIncidents } from '../lib/mapboxIncidents';
 import { aggregateRouteWarnings } from '../lib/riskAggregation';
 import { retrieveTomTomIncidents } from '../lib/tomtomIncidents';
+import { buildRouteTimeline } from '../lib/routeTimelineBuilder';
 
 type Stage = Extract<GenerationEvent['stage'], 'route' | 'critical' | 'weather'>;
 type UnknownRecord = Record<string, unknown>;
@@ -348,14 +349,7 @@ export const analyzeRoute = async (originName: string, destinationName: string, 
       waypoints: namedCheckpoints.map(point => resolvedWeather(point.name))
     },
     riskIntensity: risk.riskIntensity, riskTypes: risk.riskTypes,
-    timeline: [
-      { id: 'route-origin', title: originName, description: 'Google Maps rota başlangıcı.', type: 'start' },
-      ...allPoints.map((point, index) => ({
-        id: `route-candidate-${index + 1}`, title: `${point.weather.location} — yol uyarısı adayı`,
-        description: point.incident.description, type: 'warning' as const
-      })),
-      { id: 'route-destination', title: destinationName, description: 'Google Maps rota varışı.', type: 'end' }
-    ],
+    timeline: buildRouteTimeline(routeSchematic, allPoints, options?.departureTime),
     criticalPoints: allPoints,
     routeSchematic,
     groundingMetadata: dedupeGroundingChunks([...criticalResult.sources, ...weatherResult.sources])

@@ -35,11 +35,11 @@ const getIcon = (iconType: string | undefined, eventType: string) => {
 
 const getColorClass = (type: string) => {
   switch (type) {
-    case 'start': return 'bg-cyan-600';
-    case 'end': return 'bg-emerald-500';
+    case 'start': return 'bg-cyan-800';
+    case 'end': return 'bg-emerald-700';
     case 'danger': return 'bg-rose-500';
-    case 'warning': return 'bg-amber-500';
-    case 'break': return 'bg-yellow-400';
+    case 'warning': return 'bg-amber-700';
+    case 'break': return 'bg-yellow-700';
     case 'stop': return 'bg-indigo-500';
     default: return 'bg-slate-400';
   }
@@ -63,13 +63,14 @@ export const RouteTimeline: React.FC<RouteTimelineProps> = ({ events }) => {
 
   return (
     <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
-      <div className="flex justify-between items-center mb-6">
-        <h3 className="text-xl font-bold text-slate-800">Yolculuk Akışı ve Güvenli Sürüş Talimatları</h3>
+      <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center mb-6">
+        <h3 className="text-xl font-bold text-slate-800">Yolculuk Akışı</h3>
         <button
+          type="button"
           onClick={speakInstructions}
-          className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-full text-sm font-medium transition-colors shadow-md"
+          className="flex min-h-11 items-center justify-center gap-2 bg-emerald-700 hover:bg-emerald-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700 text-white px-4 py-2 rounded-full text-sm font-medium transition-colors shadow-md"
         >
-          <span className="text-lg">🔊</span> Talimatları Seslendir
+          <span className="text-lg" aria-hidden="true">🔊</span> Akışı Seslendir
         </button>
       </div>
 
@@ -94,15 +95,15 @@ export const RouteTimeline: React.FC<RouteTimelineProps> = ({ events }) => {
               </div>
 
               {/* Content */}
-              <div className="flex-1 pt-1">
-                <h4 className={`text-base font-bold ${event.type === 'danger' ? 'text-rose-600' : 'text-slate-800'}`}>
+              <div className="min-w-0 flex-1 pt-1">
+                <h4 className={`break-words text-base font-bold ${event.type === 'danger' ? 'text-rose-600' : 'text-slate-800'}`}>
                   {event.title}
                 </h4>
                 <p className="text-sm text-slate-600 mt-1 leading-relaxed">
                   {event.type === 'danger' && <span className="font-bold text-rose-600 mr-1">EN KRİTİK BÖLGE:</span>}
                   {event.type === 'warning' && <span className="font-bold text-amber-600 mr-1">Dikkat:</span>}
-                  {event.type === 'break' && <span className="font-bold text-slate-700 mr-1">ZORUNLU MOLA:</span>}
-                  {event.type === 'stop' && <span className="font-bold text-indigo-700 mr-1">ARA DURAK:</span>}
+                  {event.type === 'break' && <span className="font-bold text-slate-700 mr-1">PLANLI MOLA:</span>}
+                  {event.type === 'stop' && <span className="font-bold text-indigo-700 mr-1">ROTA GEÇİŞİ:</span>}
                   {event.description}
                 </p>
               </div>

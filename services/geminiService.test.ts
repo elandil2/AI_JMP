@@ -277,6 +277,8 @@ test('Maps steps create route and weather checkpoints even when no road incident
       assert.equal(analysis.weather.origin.temp, '20°C');
       assert.equal(analysis.criticalPoints?.length, 0);
       assert.ok((analysis.routeSchematic?.nodes ?? []).some(node => node.type === 'break'));
+      assert.equal(analysis.timeline.length, analysis.routeSchematic?.nodes.length);
+      assert.ok(analysis.timeline.some(event => event.type === 'break'));
       assert.match(JSON.stringify(calls[1]), /koordinat/);
     } finally { restoreFetch(); }
   });

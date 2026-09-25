@@ -8,6 +8,7 @@ import { SourceCoverageNotice } from "@/components/SourceCoverageNotice";
 import { RiskCharts } from "@/components/RiskCharts";
 import { CriticalPointsTable } from "@/components/CriticalPointsTable";
 import { RouteSchematic } from "@/components/RouteSchematic";
+import { RouteTimeline } from "@/components/RouteTimeline";
 import { ReportSources } from "@/components/ReportSources";
 import type { RouteAnalysis } from "@/types";
 import { getReportStatusKind, reportStatusMessage, shouldPollReport } from "@/lib/reportStatus";
@@ -159,6 +160,8 @@ export default function PublicReportPage() {
                   </h3>
                   <CriticalPointsTable points={report.analysis.criticalPoints || []} weather={report.analysis.weather} totalDistance={report.analysis.summary.totalDistance} />
                 </section>
+
+                {report.analysis.timeline?.length > 0 && <RouteTimeline events={report.analysis.timeline} />}
 
                 {/* Route Schematic - Moved to bottom */}
                 {report.analysis.routeSchematic && report.analysis.routeSchematic.nodes && report.analysis.routeSchematic.nodes.length > 0 && (

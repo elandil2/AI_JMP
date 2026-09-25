@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
+import { timelineForDisplay } from "@/lib/routeTimelineBuilder";
+import type { RouteAnalysis } from "@/types";
 
 export async function GET(_: Request, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
@@ -20,6 +22,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ slug: stri
       destination_county,
       destination_lat,
       destination_lng,
+      departure_time,
       analysis,
       status,
       created_at
@@ -32,5 +35,9 @@ export async function GET(_: Request, { params }: { params: Promise<{ slug: stri
   if (!data) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (data.status !== "ready") return NextResponse.json({ error: "Report not ready" }, { status: 400 });
 
-  return NextResponse.json({ report: data });
+  const analysis = data.analysis as RouteAnalysis | null;
+  return NextResponse.json({ report: {
+    ...data,
+    analysis: analysis ? { ...analysis, timeline: timelineForDisplay(analysis, data.departure_time ?? undefined) } : analysis
+  } });
 }
