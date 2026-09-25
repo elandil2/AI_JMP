@@ -5,6 +5,7 @@ import { findLocation } from '../lib/location';
 import { parseJsonResponse } from '../lib/analysisValidation';
 import { analyzeRoute, setGeminiClientFactoryForTests, type GeminiClient } from '../services/geminiService';
 import type { GenerationEvent } from '../types';
+import { resolveGeminiModel } from '../lib/aiModels';
 
 if (process.env.AI_JMP_ALLOW_PAID_PROVIDER_TEST !== 'yes') {
   throw new Error('Set AI_JMP_ALLOW_PAID_PROVIDER_TEST=yes to run paid Maps and Gemini requests.');
@@ -33,6 +34,19 @@ setGeminiClientFactoryForTests(() => ({
           keys: Object.keys(parsed),
           criticalCount: points.length,
           firstPointKeys: Object.keys(first),
+          researchCandidates: points.slice(0, 8).map(item => {
+            const point = item && typeof item === 'object' ? item as Record<string, unknown> : {};
+            const incident = point.incident && typeof point.incident === 'object' ? point.incident as Record<string, unknown> : {};
+            let sourceHost = '';
+            try { sourceHost = new URL(String(incident.source ?? '')).hostname; } catch { /* no source URL */ }
+            return { location: point.location, coordinate: point.coordinate, type: incident.type, description: incident.description, sourceHost };
+          }),
+          weatherItems: Array.isArray(parsed) ? parsed.map(item => {
+            const point = item && typeof item === 'object' ? item as Record<string, unknown> : {};
+            let sourceHost = '';
+            try { sourceHost = new URL(String(point.sourceUrl ?? '')).hostname; } catch { /* no source URL */ }
+            return { location: point.location, temp: point.temp, condition: point.condition, icon: point.icon, forecastTime: point.forecastTime, sourceHost };
+          }) : undefined,
           coordinateType: typeof first.coordinate,
           timeOffsetType: typeof first.timeOffsetHours,
           weatherType: typeof first.weather,
@@ -55,6 +69,7 @@ try {
     `${destination.lat},${destination.lng}`,
     {
       useTolls: true,
+      model: resolveGeminiModel(process.env.AI_JMP_SMOKE_MODEL),
       departureTime: new Date().toISOString(),
       onUsage: (event) => {
         events.push({
@@ -79,6 +94,9 @@ try {
     unverifiedPoints: analysis.criticalPoints?.filter(point => point.routeVerification?.status === 'unverified').length ?? 0,
     sourcedIncidents: analysis.criticalPoints?.filter(point => Boolean(point.incident.source)).length ?? 0,
     routeSchematicNodes: analysis.routeSchematic?.nodes.length ?? 0,
+    schematic: analysis.routeSchematic?.nodes.map(node => ({ name: node.name, type: node.type, km: node.distanceFromStart, at: node.timeFromStart })),
+    weather: [analysis.weather.origin, ...(analysis.weather.waypoints ?? []), analysis.weather.destination].map(point => ({ location: point.location, temp: point.temp, condition: point.condition, source: point.source })),
+    incidentProviderCoverage: analysis.summary.incidentProviderCoverage,
     groundingLinks: analysis.groundingMetadata?.length ?? 0,
     events,
     responseShapes,

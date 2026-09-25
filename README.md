@@ -17,12 +17,16 @@ Lojistik operasyonlarında yolculuk öncesi hazırlığı destekleyen web uygula
 - İl/ilçe, kalkış zamanı ve ücretli yol tercihiyle tek rapor oluşturma.
 - Mesafe, Maps otomobil süresi, tahmini kamyon sürüşü ve dinlenme sürelerinin ayrıştırılması.
 - Numaralı rota şeması: geniş ekranda üç sütunlu kıvrımlı akış, dar ekranda dikey sıralama.
-- Risk, hava durumu ve mevcut kaynak bağlantılarının görüntülenmesi.
+- Maps adımlarından hesaplanan rota ara noktaları ve teyit edilmemiş mola planlama noktaları.
+- Rota boyunca hava tahmini; sağlayıcı arama kaydı yoksa sonuç açıkça AI tahmini olarak işaretlenir.
+- Kaynaklı rota koridoru olay adayları, 100 km başına aday yoğunluğu ve resmî kontrol bağlantıları.
 - Paylaşım bağlantısı, WhatsApp paylaşımı, navigasyon bağlantısı ve yazdırma/PDF.
 - Seçilen raporların listesini CSV olarak dışa aktarma.
-- En fazla 10 farklı rotalık CSV kuyruğu; her satırı operatörün tek tek başlatması.
+- En fazla 20 farklı rotalık CSV kuyruğu; her satırı operatörün tek tek başlatması.
 
-Normal kullanımın varsayılan modeli **Gemini 2.5 Flash**. Yönetici ekranında başka model seçeneği görünmesi, sağlayıcı hesabında çalıştığının doğrulandığı anlamına gelmez. 3.8 karşılaştırması tamamlanmış bir test olarak sunulmaz.
+Normal kullanımın varsayılan modeli **Gemini 3.7 Flash**. 2.5 ve 3.8 yönetici karşılaştırması için korunur. 25 Eylül 2026'da Menemen → Arguvan üzerinde 3.7 ve 3.8 sağlayıcı denemeleri yapıldı; model yükseltmesi tek başına kaynak doğruluğunu sağlamadı.
+
+`MAPBOX_TOKEN` varsa Mapbox olayları kontrol edilir. `TOMTOM_API_KEY` varsa Türkiye kapsaması belgelenmiş TomTom kaza, şerit/yol kapanması ve yol çalışması adayları ayrıca sorgulanır; anahtar yoksa bu kaynak kapsamı mevcut sayılmaz. Her iki sağlayıcının Google rotasına yakın olayları yalnızca **koridor adayıdır**; aynı yol ve yön teyidi değildir. KGM sayfalarının ticari otomatik kullanımı için ayrıca kullanım hakkı gerekir; `KGM_COMMERCIAL_DATA_PERMISSION=yes` olmadan modelin KGM araştırma aşaması çalışmaz ve bağlantıları manuel kontrol içindir. Google Weather API adaptörü hazırlanmıştır, ancak mevcut proje anahtarı 403 döndürdüğü ve saatlik tahminlerin saklama sınırı bulunduğu için kalıcı rapora bağlanmamıştır.
 
 ## Teknik özet
 
@@ -46,13 +50,15 @@ npm run build
 npm run start
 ```
 
-`npm run start`, başarılı build sonrasında kullanılır. `npm run lint` mevcut durumda ilk yapılandırma ekranını açıyor; lint kontrolü geçmiş sayılmamalıdır.
+`npm run start`, başarılı build sonrasında kullanılır. ESLint 9 yapılandırması henüz eklenmediği için bağımsız lint kontrolü geçmiş sayılmamalıdır.
 
 ## Yayın ve teslim durumu
 
 GitHub deposu `elandil2/AI_JMP`, Vercel projesi `jmp__ai`; üretim dalı `main`.
 
 15 Eylül 2026 tarihinde Ataşehir → Van/Erciş için tek canlı Gemini 2.5 Flash raporu başarıyla oluşturuldu ve 12 duraklı yeni şema doğrulandı. Bu sonuç tüm rotaların, hesapların, tahminlerin veya güvenlik kontrollerinin eksiksiz doğrulandığı anlamına gelmez.
+
+25 Eylül 2026 yerel dalında Menemen → Arguvan ve Menemen → Eskişehir için yeni raporlar üretildi; rota şeması/hava ara noktaları tarayıcıda görüldü. Bu kod dalı henüz Vercel canlı yayınına alınmadı. Supabase'te 3.7 modeline izin veren geriye uyumlu iki model kısıtı genişletildi ve ikinci raporda kullanım olaylarının kaydı doğrulandı.
 
 Teslim ZIP'i kaynak kod paketidir: **API anahtarları, kullanıcılar ve rapor verileri içermez; tam sistem yedeği değildir.** Mevcut Supabase temel şemasının tam kuruluş migration'ı bu depoda bulunmuyor. Güvenlik sıkılaştırması ve tam geri yükleme testi ayrı devir maddeleridir.
 

@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth";
 import { findLocation } from "@/lib/location";
 import { sanitizeAnalysis } from "@/lib/analysis";
+import { assertPublishableRoute } from "@/lib/reportQuality";
 import { generateSlug } from "@/lib/slug";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { analyzeRoute } from "@/services/geminiService";
@@ -150,6 +151,7 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
   try {
     const options = { useTolls: batch.use_tolls, departureTime: batch.departure_time ?? undefined, model: batch.model, onUsage };
     const analysis: RouteAnalysis = sanitizeAnalysis(await analyzeRoute(originLabel, destinationLabel, originCoords, destCoords, options));
+    assertPublishableRoute(analysis);
     const { error: reportUpdateError } = await supabase.from("reports").update({ analysis, status: "ready", error_message: null }).eq("id", report.id).eq("operator_id", auth.userId);
     if (reportUpdateError) throw new Error(reportUpdateError.message);
     const { error: itemUpdateError } = await supabase.from("batch_items").update({ status: "ready", report_id: report.id, error_message: null }).eq("id", claimed.id).eq("status", "processing");

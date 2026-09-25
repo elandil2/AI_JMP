@@ -26,7 +26,7 @@ export default function BatchUploadPage() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [useTolls, setUseTolls] = useState(true);
   const [startTime, setStartTime] = useState("");
-  const [model, setModel] = useState("gemini-2.5-flash");
+  const [model, setModel] = useState("gemini-3.7-flash");
   const [telemetryWarning, setTelemetryWarning] = useState<string | null>(null);
 
   const loadBatch = useCallback(async (id: string, quiet = false) => {
@@ -98,7 +98,7 @@ export default function BatchUploadPage() {
       <div className="flex flex-wrap items-end gap-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <label className="flex items-center gap-3 text-sm text-slate-700"><input type="checkbox" checked={useTolls} onChange={(event) => setUseTolls(event.target.checked)} className="h-5 w-5 rounded" />Ücretli yolları kullan</label>
         <label className="flex flex-col gap-1 text-sm font-medium text-slate-700">Başlangıç zamanı<input type="datetime-local" value={startTime} onChange={(event) => setStartTime(event.target.value)} className="rounded-md border border-slate-300 px-3 py-2" /></label>
-        {isAdmin ? <label className="flex flex-col gap-1 text-sm font-medium text-slate-700">Model<select value={model} onChange={(event) => setModel(event.target.value)} className="rounded-md border border-slate-300 px-3 py-2"><option value="gemini-2.5-flash">Gemini 2.5 Flash</option><option value="gemini-3.8-flash">Gemini 3.8 Flash</option></select></label> : <p className="text-sm text-slate-600">Model: Gemini 2.5 Flash</p>}
+        {isAdmin ? <label className="flex flex-col gap-1 text-sm font-medium text-slate-700">Model<select value={model} onChange={(event) => setModel(event.target.value)} className="min-h-11 rounded-md border border-slate-300 px-3 py-2"><option value="gemini-3.7-flash">Gemini 3.7 Flash</option><option value="gemini-3.8-flash">Gemini 3.8 Flash</option><option value="gemini-2.5-flash">Gemini 2.5 Flash (karşılaştırma)</option></select></label> : <p className="text-sm text-slate-600">Model: Gemini 3.7 Flash</p>}
       </div>
       <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow">
         <div onDragOver={(event) => { event.preventDefault(); setIsDragging(true); }} onDragLeave={() => setIsDragging(false)} onDrop={(event) => { event.preventDefault(); setIsDragging(false); const dropped = event.dataTransfer.files[0]; if (dropped) processFile(dropped); }} className={`rounded-xl border-2 border-dashed p-6 text-center focus-within:outline focus-within:outline-2 focus-within:outline-blue-600 ${isDragging ? "border-blue-500 bg-blue-50" : "border-slate-200"}`}><label className="cursor-pointer text-sm text-slate-700"><span className="font-semibold text-blue-600">Dosya seçin</span> veya sürükleyip bırakın (.csv)<input type="file" accept=".csv,text/csv" aria-label="CSV dosyası seç" onChange={(event) => { const selected = event.target.files?.[0]; if (selected) processFile(selected); }} className="sr-only" /></label>{file && <p className="mt-2 text-xs text-slate-500">Seçilen dosya: {file.name}</p>}</div>

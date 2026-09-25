@@ -4,9 +4,9 @@ import { requireAuth } from "@/lib/auth";
 import { parseBatchCsv } from "@/lib/csv";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 
-const DEFAULT_MODEL = "gemini-2.5-flash";
-const ADMIN_MODEL = "gemini-3.8-flash";
-const MAX_ROWS = 10;
+const DEFAULT_MODEL = "gemini-3.7-flash";
+const ADMIN_MODELS = new Set(["gemini-2.5-flash", "gemini-3.8-flash"]);
+const MAX_ROWS = 20;
 
 type BatchRequest = { csv: string; fileName?: string; useTolls?: boolean; departureTime?: string | null; model?: string };
 
@@ -48,8 +48,8 @@ export async function POST(req: Request) {
   const profile = await getProfile(auth.userId, auth.email);
   if ("error" in profile) return NextResponse.json({ error: profile.error }, { status: 500 });
   const model = payload.model ?? DEFAULT_MODEL;
-  if (model !== DEFAULT_MODEL && model !== ADMIN_MODEL) return NextResponse.json({ error: "Unsupported model" }, { status: 400 });
-  if (model === ADMIN_MODEL && !profile.isAdmin) return NextResponse.json({ error: "The selected model is available to administrators only" }, { status: 403 });
+  if (model !== DEFAULT_MODEL && !ADMIN_MODELS.has(model)) return NextResponse.json({ error: "Unsupported model" }, { status: 400 });
+  if (ADMIN_MODELS.has(model) && !profile.isAdmin) return NextResponse.json({ error: "The selected model is available to administrators only" }, { status: 403 });
 
   let departureTime: string | null = null;
   if (payload.departureTime) {

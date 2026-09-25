@@ -7,6 +7,7 @@ import { findLocation } from "@/lib/location";
 import { generateSlug } from "@/lib/slug";
 import { analyzeRoute } from "@/services/geminiService";
 import { sanitizeAnalysis } from "@/lib/analysis";
+import { assertPublishableRoute } from "@/lib/reportQuality";
 import type { RouteAnalysis } from "@/types";
 
 export const maxDuration = 300;
@@ -139,6 +140,7 @@ export async function POST(req: Request) {
       }
     });
     const analysis = sanitizeAnalysis(rawAnalysis);
+    assertPublishableRoute(analysis);
 
     const { error: saveError } = await supabase
       .from("reports")

@@ -5,6 +5,7 @@ const PRICING_VERSION = 'Google Gemini standard paid rates, September 2026';
 
 const TOKEN_PRICING: Record<GeminiModel, { inputPerMillion: number; outputPerMillion: number }> = {
   'gemini-2.5-flash': { inputPerMillion: 0.30, outputPerMillion: 2.50 },
+  'gemini-3.7-flash': { inputPerMillion: 0.75, outputPerMillion: 3.75 },
   'gemini-3.8-flash': { inputPerMillion: 0.75, outputPerMillion: 3.75 }
 };
 

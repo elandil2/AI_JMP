@@ -33,9 +33,14 @@ test('the live Gebze example has distinct Maps and truck planning durations with
   assert.equal(parseHours('3s 30dk'), 3.5);
 });
 
-test('planning speed defaults to 60 km/h, accepts 65, and keeps Maps duration as a floor', () => {
+test('planning speed uses 65 only to avoid a near-arrival overnight rest and keeps Maps as a floor', () => {
   const route = { distance: { value: 550_000 }, duration: { value: 60 } } as DirectionsResult;
-  const at60 = mapsTiming(route);
+  const adapted = mapsTiming(route);
+  assert.equal(adapted.summary.drivingDuration, '8 sa 28 dk');
+  assert.equal(adapted.summary.breakDuration, '0 sa 45 dk');
+  assert.match(adapted.summary.routeNotice ?? '', /50 km kala/);
+
+  const at60 = mapsTiming(route, { planningSpeedKmh: 60 });
   assert.equal(at60.summary.drivingDuration, '9 sa 10 dk');
   assert.equal(at60.summary.breakDuration, '11 sa 45 dk');
   assert.equal(at60.summary.estimatedDuration, '20 sa 55 dk');
@@ -47,6 +52,9 @@ test('planning speed defaults to 60 km/h, accepts 65, and keeps Maps duration as
   assert.equal(at65.summary.estimatedDuration, '9 sa 13 dk');
   assert.match(at65.summary.routeNotice ?? '', /65 km\/sa ortalama/);
   assert.match(at65.summary.breakNote, /Gerçek sürüş\/takograf hesabı değildir/);
+
+  const longer = mapsTiming({ ...route, distance: { text: '650 km', value: 650_000 } });
+  assert.match(longer.summary.routeNotice ?? '', /60 km\/sa ortalama/);
 
   const mapsFloor = mapsTiming({
     ...route,

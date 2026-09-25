@@ -45,6 +45,7 @@ export const SummaryCards: React.FC<SummaryCardsProps> = ({ data, weather }) => 
         <div className="mt-4">
           <p className="text-3xl font-black text-slate-800">{weather.origin.temp}</p>
           <p className="text-xs text-slate-500 font-medium">{weather.origin.condition}</p>
+          {weather.origin.source === 'ai_unverified' && <p className="mt-1 text-xs font-medium text-amber-800">AI tahmini · doğrulanmadı</p>}
         </div>
       </div>
 
@@ -52,13 +53,13 @@ export const SummaryCards: React.FC<SummaryCardsProps> = ({ data, weather }) => 
       <div className="md:col-span-2 bg-gradient-to-r from-slate-900 to-slate-800 p-5 rounded-2xl shadow-lg text-white flex flex-col justify-between relative overflow-hidden print:bg-white print:text-slate-900 print:border-2 print:border-slate-800">
         <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-5 rounded-full -mr-20 -mt-20 print:hidden"></div>
 
-        <div className="flex items-center justify-between z-10">
+        <div className="z-10 flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <span className="text-xs font-bold text-slate-400 print:text-slate-600 uppercase tracking-wider">Toplam Mesafe</span>
             <p className="text-2xl font-bold text-white print:text-slate-900 mt-1">{data.totalDistance}</p>
           </div>
-          <div className="text-right">
-            <span className="text-xs font-bold text-slate-400 print:text-slate-600 uppercase tracking-wider flex items-center justify-end gap-1">
+          <div className="text-left sm:text-right">
+            <span className="flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-slate-400 print:text-slate-600 sm:justify-end">
               <Clock className="w-3 h-3" /> {data.durationLabel || "Süre"}
             </span>
             <p className="text-2xl font-bold text-cyan-400 print:text-slate-900 mt-1">{data.estimatedDuration}</p>
@@ -73,14 +74,14 @@ export const SummaryCards: React.FC<SummaryCardsProps> = ({ data, weather }) => 
           </dl>
         )}
 
-        <div className="mt-4 pt-4 border-t border-slate-700/50 print:border-slate-300 z-10 flex items-center justify-between">
+        <div className="z-10 mt-4 flex flex-col gap-3 border-t border-slate-700/50 pt-4 print:border-slate-300 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <span className="text-xs text-rose-400 print:text-rose-600 font-bold block">PLANLANAN MOLA</span>
             <span className="text-lg font-bold">{data.mandatoryBreak && data.mandatoryBreak !== '-' ? data.mandatoryBreak : 'Gerekli Değil'}</span>
           </div>
-          <div className="max-w-[55%] text-right">
+          <div className="w-full text-left sm:max-w-[55%] sm:text-right">
             <details className="group">
-              <summary className="flex min-h-11 cursor-pointer items-center justify-end text-xs font-medium text-cyan-200 underline underline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-300 print:hidden">
+              <summary className="flex min-h-11 cursor-pointer items-center text-xs font-medium text-cyan-200 underline underline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-300 print:hidden sm:justify-end">
                 Rota varsayımlarını göster
               </summary>
               <p className="mt-2 max-h-32 overflow-y-auto text-left text-xs leading-5 text-slate-200 print:hidden">
@@ -113,6 +114,7 @@ export const SummaryCards: React.FC<SummaryCardsProps> = ({ data, weather }) => 
         <div className="mt-4">
           <p className="text-3xl font-black text-slate-800">{weather.destination.temp}</p>
           <p className="text-xs text-slate-500 font-medium">{weather.destination.condition}</p>
+          {weather.destination.source === 'ai_unverified' && <p className="mt-1 text-xs font-medium text-amber-800">AI tahmini · doğrulanmadı</p>}
         </div>
       </div>
     </div>

@@ -11,6 +11,7 @@ import { RiskCharts } from "@/components/RiskCharts";
 import { CriticalPointsTable } from "@/components/CriticalPointsTable";
 import { RouteSchematic } from "@/components/RouteSchematic";
 import { ReportSources } from "@/components/ReportSources";
+import { publicReportUrl } from "@/lib/publicReportUrl";
 import type { RouteAnalysis } from "@/types";
 import { getReportStatusKind, reportStatusLabel, reportStatusMessage, shouldPollReport } from "@/lib/reportStatus";
 
@@ -92,7 +93,7 @@ export default function OperatorReportPage() {
       : null;
 
   const publicLink = hasAnalysis && report
-    ? `${process.env.NEXT_PUBLIC_APP_URL || window.location.origin}/r/${report.public_slug}`
+    ? publicReportUrl(report.public_slug, window.location.origin, process.env.NEXT_PUBLIC_APP_URL)
     : "";
 
   const navigationUrl = hasAnalysis && report
@@ -199,12 +200,12 @@ export default function OperatorReportPage() {
               <div className="space-y-8">
                 {/* Summary Cards - Moved to top as requested */}
                 <SummaryCards data={report.analysis.summary} weather={report.analysis.weather} />
-                <SourceCoverageNotice summary={report.analysis.summary} />
+                <SourceCoverageNotice analysis={report.analysis} />
 
                 {/* Risk Charts */}
                 <RiskCharts
-                  intensityData={report.analysis.summary.sourceCoverage === 'verified' ? report.analysis.riskIntensity : []}
-                  typeData={report.analysis.summary.sourceCoverage === 'verified' ? report.analysis.riskTypes : []}
+                  intensityData={report.analysis.riskIntensity}
+                  typeData={report.analysis.riskTypes}
                 />
 
                 {/* Critical Points Table */}
@@ -212,7 +213,7 @@ export default function OperatorReportPage() {
                   <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
                     <span className="text-2xl">🚧</span> Bölgesel Riskler ve Yol Durumu
                   </h3>
-                  <CriticalPointsTable points={report.analysis.criticalPoints || []} />
+                  <CriticalPointsTable points={report.analysis.criticalPoints || []} weather={report.analysis.weather} totalDistance={report.analysis.summary.totalDistance} />
                 </section>
 
                 {/* Route Schematic - Moved to bottom */}

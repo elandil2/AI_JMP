@@ -5,7 +5,8 @@ import { parseJsonResponse, validateCriticalAnalysis, validateRouteFallback, val
 import { estimateGeminiUsageCost, estimatedDirectionsCost } from './usageCost';
 
 test('only approved Gemini models resolve', () => {
-  assert.equal(resolveGeminiModel(), 'gemini-2.5-flash');
+  assert.equal(resolveGeminiModel(), 'gemini-3.7-flash');
+  assert.equal(resolveGeminiModel('gemini-3.7-flash'), 'gemini-3.7-flash');
   assert.equal(resolveGeminiModel('gemini-3.8-flash'), 'gemini-3.8-flash');
   assert.throws(() => resolveGeminiModel('gemini-1.5-pro'), /Unsupported Gemini model/);
 });

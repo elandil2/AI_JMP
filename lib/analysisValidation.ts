@@ -143,6 +143,25 @@ export function validateCriticalAnalysis(value: unknown, options: { dropInvalidP
   let invalidCriticalPointCount = 0;
   value.criticalPoints.forEach((item, index) => {
     try {
+      // Road research only needs an event, a source and a coordinate. Weather,
+      // traffic and arrival time are assembled from independent providers later.
+      if (options.dropInvalidPoints && isRecord(item)) {
+        if (!isCoordinate(item.coordinate) && isNumber(item.latitude) && isNumber(item.longitude)) {
+          item.coordinate = `${item.latitude},${item.longitude}`;
+        }
+        if (!isRecord(item.incident) && isNonEmptyString(item.description)) {
+          item.incident = { type: item.type ?? 'info', description: item.description, source: item.source ?? item.sourceUrl };
+        }
+        if (isRecord(item.incident) && !isNonEmptyString(item.incident.source)) {
+          item.incident.source = item.source ?? item.sourceUrl;
+        }
+        if (!isRecord(item.weather)) {
+          item.weather = { location: isNonEmptyString(item.location) ? item.location : 'Rota üzeri', temp: '-', condition: 'Hava durumu ayrı sorgulanıyor', icon: 'unknown' };
+        }
+        if (!isRecord(item.traffic)) {
+          item.traffic = { status: 'unknown', description: 'Trafik yoğunluğu doğrulanmadı' };
+        }
+      }
       if (!isRecord(item) || !isCoordinate(item.coordinate) || (item.timeOffsetHours !== undefined && (!isNumber(item.timeOffsetHours) || item.timeOffsetHours < 0)) || !isRecord(item.traffic) || !isRecord(item.incident)) throw new Error(`criticalPoints[${index}] requires valid coordinates, time offset, traffic and incident objects.`);
       item.id = isNonEmptyString(item.id) ? item.id : `point-${index}`;
       item.weather = expectWeather(item.weather, `criticalPoints[${index}].weather`);

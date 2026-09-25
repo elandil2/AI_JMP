@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { authFetch } from "@/lib/apiClient";
 import Header from "@/components/Header";
+import { publicReportUrl } from "@/lib/publicReportUrl";
 
 type CityOption = {
   name: string;
@@ -118,8 +119,7 @@ export default function NewReportPage() {
         setError("Rapor oluşturuldu ancak paylaşım bağlantısı hazırlanamadı.");
         return;
       }
-      const base = process.env.NEXT_PUBLIC_APP_URL || window.location.origin;
-      setResultLink(`${base}/r/${(payload as { publicSlug: string }).publicSlug}`);
+      setResultLink(publicReportUrl((payload as { publicSlug: string }).publicSlug, window.location.origin, process.env.NEXT_PUBLIC_APP_URL));
     } catch (err) {
       console.error(err);
       setError("Bağlantı kurulamadı. Lütfen daha sonra tekrar deneyin.");
@@ -141,6 +141,9 @@ export default function NewReportPage() {
         </div>
 
         <form onSubmit={handleSubmit} className="bg-white border border-slate-200 rounded-2xl shadow p-6 space-y-4">
+          <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+            İl ve ilçe seçimi merkez koordinatlarını kullanır. Gerçek Total terminali veya müşteri tesisinin giriş noktası seçilmediği için mesafe, harita ve mola konumları yaklaşık kalır.
+          </p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1">
               <label htmlFor="origin-city" className="text-xs uppercase text-slate-500 font-semibold">Başlangıç ili</label>

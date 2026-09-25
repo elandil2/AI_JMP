@@ -10,7 +10,9 @@ export interface SummaryStats {
   durationLabel?: string;
   routeNotice?: string;
   sourceCoverage?: 'unverified' | 'verified';
+  incidentProviderCoverage?: 'available' | 'partial' | 'unknown' | 'unavailable';
   omittedUnsourcedPoints?: number;
+  omittedUngroundedPoints?: number;
   omittedMalformedPoints?: number;
   generatedAt?: string;
 }
@@ -19,6 +21,8 @@ export interface RiskSegment {
   name: string;
   value: number;
   color: string;
+  eventCount?: number;
+  distanceKm?: number;
 }
 
 export interface RiskType {
@@ -52,6 +56,10 @@ export interface WeatherInfo {
   temp: string;
   condition: string;
   icon: 'sunny' | 'cloudy' | 'rainy' | 'storm' | 'snow' | 'fog' | 'unknown';
+  source?: 'google_weather' | 'gemini_search' | 'ai_unverified' | 'unavailable';
+  forecastTime?: string;
+  passageTime?: string;
+  sourceUrl?: string;
 }
 
 export interface RouteAnalysis {
@@ -72,6 +80,12 @@ export interface RouteAnalysis {
 export interface CriticalPoint {
   id: string;
   coordinate: string; // lat,lng
+  provenance?: {
+    provider: 'mapbox' | 'tomtom' | 'gemini_search';
+    fetchedAt?: string;
+    recordId?: string;
+    status: 'provider_event' | 'source_candidate';
+  };
   /** Proximity to the in-memory Maps line is not proof of the place name or an incident. */
   routeVerification?: {
     status: 'corridor_candidate' | 'off_corridor' | 'unverified';

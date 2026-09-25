@@ -4,6 +4,7 @@
  */
 
 import type { GenerationEvent } from '../types';
+import type { RouteCoordinate } from './routeGeometry';
 import { estimatedDirectionsCost } from './usageCost';
 
 export interface DirectionsResult {
@@ -21,6 +22,8 @@ export interface DirectionsResult {
   };
   startAddress: string;
   endAddress: string;
+  startLocation?: RouteCoordinate;
+  endLocation?: RouteCoordinate;
   summary: string;     // Main road names, e.g. "D100/E-80"
   steps: DirectionStep[];
   polyline: string;    // Encoded polyline for map display
@@ -31,6 +34,12 @@ export interface DirectionStep {
   instruction: string;
   distance: string;
   duration: string;
+  distanceMeters?: number;
+  durationSeconds?: number;
+  startLocation?: RouteCoordinate;
+  endLocation?: RouteCoordinate;
+  /** Best-effort road name/code preserved from the Maps instruction markup. */
+  roadLabel?: string;
   maneuver?: string;
 }
 
@@ -49,6 +58,36 @@ export const DEFAULT_TRUCK_PLANNING_SPEED_KMH = 60;
 const emitUsage = async (callback: DirectionsOptions['onUsage'], event: GenerationEvent) => {
   if (callback) await callback(event);
 };
+
+function parseRouteCoordinate(value: unknown): RouteCoordinate | undefined {
+  if (typeof value !== 'object' || value === null) return undefined;
+  const location = value as { lat?: unknown; lng?: unknown };
+  if (typeof location.lat !== 'number' || typeof location.lng !== 'number'
+    || !Number.isFinite(location.lat) || !Number.isFinite(location.lng)) return undefined;
+  const lat = location.lat as number;
+  const lng = location.lng as number;
+  if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return undefined;
+  return { lat, lng };
+}
+
+function decodeInstructionText(value: string): string {
+  return value.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/&amp;/gi, '&')
+    .replace(/&quot;/gi, '"').replace(/&#39;|&apos;/gi, "'").replace(/&lt;/gi, '<').replace(/&gt;/gi, '>')
+    .replace(/\s+/g, ' ').trim();
+}
+
+function parseRoadLabel(htmlInstruction: string): string | undefined {
+  const boldLabels = [...htmlInstruction.matchAll(/<b\b[^>]*>(.*?)<\/b>/gi)]
+    .map(match => decodeInstructionText(match[1].replace(/<[^>]*>/g, ' ')))
+    .filter(label => label && !/^(north(?:east|west)?|south(?:east|west)?|east|west|kuzey|güney|doğu|batı|right|left|straight|sağ|sol|düz|yönünde|toward|towards)$/i.test(label));
+  if (!boldLabels.length) return undefined;
+
+  const routeCodes = boldLabels.filter(label => /\b(?:D|E|O|K|A)\s*[-/]?\s*\d{1,4}\b/i.test(label));
+  const roadNames = boldLabels.filter(label => /(?:yolu|otoyolu|çevre yolu|cad\.?|caddesi|bulvarı|bulvar|sokağı|köprüsü|tüneli|highway|motorway|road|street)\b/i.test(label));
+  const selected = routeCodes.length ? routeCodes : roadNames;
+  if (!selected.length) return undefined;
+  return [...new Set(selected)].join(' / ').slice(0, 120);
+}
 
 /**
  * Calls Google Maps Directions API with coordinates
@@ -124,13 +163,28 @@ export async function getDirections(
       const trafficDuration = legs.every((leg: any) => Number.isFinite(leg.duration_in_traffic?.value) && leg.duration_in_traffic.value > 0)
         ? legs.reduce((sum: number, leg: any) => sum + leg.duration_in_traffic.value, 0) : undefined;
       const durationText = (seconds: number) => { const minutes = Math.round(seconds / 60); return `${Math.floor(minutes / 60)} sa ${minutes % 60} dk`; };
-      const steps: DirectionStep[] = legs.flatMap((leg: any) => (leg.steps ?? []).map((step: any) => ({
-        instruction: step.html_instructions?.replace(/<[^>]*>/g, "") || "", distance: step.distance?.text || "", duration: step.duration?.text || "", maneuver: step.maneuver
-      })));
+      const steps: DirectionStep[] = legs.flatMap((leg: any) => (leg.steps ?? []).map((step: any) => {
+        const htmlInstruction = typeof step.html_instructions === 'string' ? step.html_instructions : '';
+        const distanceMeters = Number.isFinite(step.distance?.value) && step.distance.value >= 0 ? step.distance.value : undefined;
+        const durationSeconds = Number.isFinite(step.duration?.value) && step.duration.value >= 0 ? step.duration.value : undefined;
+        return {
+          instruction: decodeInstructionText(htmlInstruction), distance: step.distance?.text || '', duration: step.duration?.text || '',
+          ...(distanceMeters === undefined ? {} : { distanceMeters }),
+          ...(durationSeconds === undefined ? {} : { durationSeconds }),
+          ...(parseRouteCoordinate(step.start_location) ? { startLocation: parseRouteCoordinate(step.start_location) } : {}),
+          ...(parseRouteCoordinate(step.end_location) ? { endLocation: parseRouteCoordinate(step.end_location) } : {}),
+          ...(parseRoadLabel(htmlInstruction) ? { roadLabel: parseRoadLabel(htmlInstruction) } : {}),
+          ...(typeof step.maneuver === 'string' ? { maneuver: step.maneuver } : {})
+        };
+      }));
+      const startLocation = parseRouteCoordinate(legs[0].start_location);
+      const endLocation = parseRouteCoordinate(legs.at(-1).end_location);
       result = {
         distance: { text: `${Math.round(distance / 1000)} km`, value: distance }, duration: { text: durationText(duration), value: duration },
         durationInTraffic: trafficDuration === undefined ? undefined : { text: durationText(trafficDuration), value: trafficDuration },
-        startAddress: legs[0].start_address, endAddress: legs.at(-1).end_address, summary: route.summary || "", steps, polyline: route.overview_polyline?.points || "", warnings: route.warnings || []
+        startAddress: legs[0].start_address, endAddress: legs.at(-1).end_address,
+        ...(startLocation ? { startLocation } : {}), ...(endLocation ? { endLocation } : {}),
+        summary: route.summary || "", steps, polyline: route.overview_polyline?.points || "", warnings: route.warnings || []
       };
       console.log(`Google Maps API: Distance = ${result.distance.text}, Duration = ${result.duration.text}`);
     }

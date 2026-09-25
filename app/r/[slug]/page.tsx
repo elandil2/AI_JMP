@@ -124,6 +124,7 @@ export default function PublicReportPage() {
             <div className="bg-slate-100 border border-slate-200 rounded-2xl overflow-hidden min-h-[360px]">
               <p className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-950">
                 Güncel Google haritası rotayı yeniden hesaplar; kayıtlı raporun mesafe ve süre hesabından farklı bir yol gösterebilir.
+                İlçe merkezi koordinatları gerçek tesis girişini temsil etmeyebilir.
               </p>
               {mapEmbedUrl && (
                 <iframe
@@ -142,12 +143,12 @@ export default function PublicReportPage() {
               <div className="space-y-8">
                 {/* Summary Cards - Moved to top as requested */}
                 <SummaryCards data={report.analysis.summary} weather={report.analysis.weather} />
-                <SourceCoverageNotice summary={report.analysis.summary} />
+                <SourceCoverageNotice analysis={report.analysis} />
 
                 {/* Risk Charts */}
                 <RiskCharts
-                  intensityData={report.analysis.summary.sourceCoverage === 'verified' ? report.analysis.riskIntensity : []}
-                  typeData={report.analysis.summary.sourceCoverage === 'verified' ? report.analysis.riskTypes : []}
+                  intensityData={report.analysis.riskIntensity}
+                  typeData={report.analysis.riskTypes}
                 />
 
                 {/* Critical Points Table */}
@@ -155,7 +156,7 @@ export default function PublicReportPage() {
                   <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
                     <span className="text-2xl">🚧</span> Bölgesel Riskler ve Yol Durumu
                   </h3>
-                  <CriticalPointsTable points={report.analysis.criticalPoints || []} />
+                  <CriticalPointsTable points={report.analysis.criticalPoints || []} weather={report.analysis.weather} totalDistance={report.analysis.summary.totalDistance} />
                 </section>
 
                 {/* Route Schematic - Moved to bottom */}

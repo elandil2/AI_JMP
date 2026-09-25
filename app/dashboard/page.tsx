@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { authFetch } from "@/lib/apiClient";
 import Header from "@/components/Header";
+import { publicReportUrl } from "@/lib/publicReportUrl";
 import { getReportStatusKind, reportStatusLabel, reportStatusMessage, shouldPollReport, type ReportStatusKind } from "@/lib/reportStatus";
 
 type ReportListItem = {
@@ -60,8 +61,7 @@ export default function DashboardPage() {
   }, [reports]);
 
   const copyLink = async (slug: string) => {
-    const base = process.env.NEXT_PUBLIC_APP_URL || window.location.origin;
-    const url = `${base}/r/${slug}`;
+    const url = publicReportUrl(slug, window.location.origin, process.env.NEXT_PUBLIC_APP_URL);
     await navigator.clipboard.writeText(url);
   };
 

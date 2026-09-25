@@ -24,3 +24,15 @@ test('report mode drops malformed points while retaining valid candidates and th
   assert.equal((result.criticalPoints as unknown[]).length, 1);
   assert.equal((result.criticalPoints as Array<{ id: string }>)[0].id, 'ok');
 });
+
+test('research candidate needs only coordinates and sourced event; weather and traffic are separate', () => {
+  const result = validateCriticalAnalysis({ criticalPoints: [{
+    latitude: 38.5, longitude: 27.1, location: 'D300',
+    incident: { type: 'roadwork', description: 'Şerit daralması', source: 'https://example.test/work' }
+  }] }, { dropInvalidPoints: true });
+  const point = (result.criticalPoints as Array<{ coordinate: string; weather: { icon: string }; traffic: { status: string } }>)[0];
+  assert.equal(point.coordinate, '38.5,27.1');
+  assert.equal(point.weather.icon, 'unknown');
+  assert.equal(point.traffic.status, 'unknown');
+  assert.equal(result.invalidCriticalPointCount, 0);
+});

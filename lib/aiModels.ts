@@ -1,8 +1,8 @@
-export const GEMINI_MODELS = ['gemini-2.5-flash', 'gemini-3.8-flash'] as const;
+export const GEMINI_MODELS = ['gemini-2.5-flash', 'gemini-3.7-flash', 'gemini-3.8-flash'] as const;
 
 export type GeminiModel = (typeof GEMINI_MODELS)[number];
 
-export const DEFAULT_GEMINI_MODEL: GeminiModel = 'gemini-2.5-flash';
+export const DEFAULT_GEMINI_MODEL: GeminiModel = 'gemini-3.7-flash';
 
 export function resolveGeminiModel(model?: string): GeminiModel {
   if (!model) return DEFAULT_GEMINI_MODEL;

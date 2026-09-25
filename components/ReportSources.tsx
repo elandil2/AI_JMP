@@ -30,10 +30,10 @@ export function ReportSources({ sources = [] }: { sources?: GroundingChunk[] }) 
   return <section className="rounded-xl border border-slate-200 bg-white p-4" aria-label="Rapor kaynakları">
     <div className="flex items-center gap-2.5">
       <BookOpen aria-hidden="true" className="h-5 w-5 shrink-0 text-indigo-600" />
-      <h3 className="font-semibold text-slate-800">Rapor kaynakları</h3>
+      <h3 className="font-semibold text-slate-800">Kaynak ve kontrol bağlantıları</h3>
       <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold tabular-nums text-slate-600" aria-label={`${links.length} kaynak`}>{links.length}</span>
     </div>
-    <p className="mt-1 text-sm text-slate-600">Bunlar modelin aramasında bulunan bağlantılardır. Her uyarıyı kanıtladıkları veya zorunlu yol kaynaklarının tamamının kontrol edildiği anlamına gelmez.</p>
+    <p className="mt-1 text-sm text-slate-600">Aşağıdaki arama bağlantıları model yanıtından gelir. Tek başlarına bir uyarıyı kanıtlamazlar.</p>
     {links.length ? <div className="mt-4 space-y-2">
       {renderLinks(0, 4)}
       {links.length > 4 && <details className="group/sources rounded-lg border border-slate-200">
@@ -45,6 +45,14 @@ export function ReportSources({ sources = [] }: { sources?: GroundingChunk[] }) 
         <div className="border-t border-slate-200 p-2">{renderLinks(4)}</div>
       </details>}
     </div>
-      : <p className="mt-2 text-sm text-slate-600">Bu kayıtta doğrulanabilir kaynak bağlantısı bulunmuyor.</p>}
+      : <p className="mt-2 text-sm text-slate-600">Bu kayıtta modelin kullandığı aramaya ait kaynak bağlantısı bulunmuyor.</p>}
+    <div className="mt-4 border-t border-slate-200 pt-4">
+      <h4 className="text-sm font-semibold text-slate-800">Resmî kontrol sayfaları</h4>
+      <p className="mt-1 text-xs leading-5 text-slate-600">Bunlar operatörün güncel durumu ayrıca kontrol etmesi içindir; bu raporda otomatik tarandıkları anlamına gelmez.</p>
+      <ul className="mt-2 grid gap-2 sm:grid-cols-2">
+        <li><a className="inline-flex min-h-11 items-center text-sm font-medium text-blue-700 underline" href="https://www.kgm.gov.tr/Sayfalar/KGM/SiteTr/YolDanisma/CalismaYapilanYollar.aspx" target="_blank" rel="noopener noreferrer">KGM çalışma yapılan yollar</a></li>
+        <li><a className="inline-flex min-h-11 items-center text-sm font-medium text-blue-700 underline" href="https://www.mgm.gov.tr/tahmin/khts.aspx" target="_blank" rel="noopener noreferrer">MGM karayolları hava tahmini</a></li>
+      </ul>
+    </div>
   </section>;
 }

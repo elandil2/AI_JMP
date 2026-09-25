@@ -15,12 +15,12 @@ test('source cards filter unsafe URLs, deduplicate URLs, and retain both source 
     { web: { uri: 'https://example.com/a' } },
     { web: {}, maps: { uri: 'https://example.com/map' } }
   ]);
-  assert.equal((html.match(/<a /g) ?? []).length, 3);
+  assert.equal((html.match(/<a /g) ?? []).length, 5);
   assert.match(html, /aria-label="3 kaynak"/);
   assert.ok(!html.includes('javascript:'));
   assert.ok(!html.includes('<script>'));
   assert.match(html, /&lt;script&gt;test&lt;\/script&gt;/);
-  assert.equal((html.match(/rel="noopener noreferrer"/g) ?? []).length, 3);
+  assert.equal((html.match(/rel="noopener noreferrer"/g) ?? []).length, 5);
   assert.ok(!html.includes('<details'));
 });
 
@@ -29,7 +29,7 @@ test('source preview shows four links and preserves more than sixteen through na
   assert.match(html, /aria-label="20 kaynak"/);
   const [preview, disclosure] = html.split('<details');
   assert.equal((preview.match(/<a /g) ?? []).length, 4);
-  assert.equal((disclosure.match(/<a /g) ?? []).length, 16);
+  assert.equal((disclosure.split('</details>')[0].match(/<a /g) ?? []).length, 16);
   assert.match(disclosure, /Diğer 16 kaynağı göster/);
   assert.ok(!/<details[^>]*\sopen(?:[\s=>])/.test(html));
   assert.match(html, /Kaynak 20, yeni sekmede açılır/);
@@ -37,8 +37,9 @@ test('source preview shows four links and preserves more than sixteen through na
 
 test('empty and invalid sources retain the honest empty state', () => {
   const html = render([{ web: { uri: 'data:text/html,hello' } }]);
-  assert.match(html, /Bu kayıtta doğrulanabilir kaynak bağlantısı bulunmuyor/);
+  assert.match(html, /Bu kayıtta modelin kullandığı aramaya ait kaynak bağlantısı bulunmuyor/);
   assert.match(html, /aria-label="0 kaynak"/);
-  assert.ok(!html.includes('<a '));
+  assert.equal((html.match(/<a /g) ?? []).length, 2);
+  assert.match(html, /KGM çalışma yapılan yollar/);
   assert.ok(!html.includes('<details'));
 });
