@@ -150,6 +150,9 @@ export default function OperatorReportPage() {
           <div className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               <div className="lg:col-span-2 bg-slate-100 border border-slate-200 rounded-2xl overflow-hidden min-h-[340px]">
+                <p className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-950">
+                  Güncel Google haritası rotayı yeniden hesaplar; kayıtlı raporun mesafe ve süre hesabından farklı bir yol gösterebilir.
+                </p>
                 {mapEmbedUrl && (
                   <iframe
                     title="Google Map"

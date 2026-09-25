@@ -2,7 +2,7 @@ import { GoogleGenAI } from '@google/genai';
 import type { CriticalPoint, GenerationEvent, GenerationTokens, GroundingChunk, RouteAnalysis, RouteOptions } from '../types';
 import { getDirections, type DirectionsResult } from '../lib/googleMaps';
 import { mapsTiming, reconcileSchematic } from '../lib/routeTiming';
-import { checkCoordinateAgainstRoute, ROUTE_CORRIDOR_TOLERANCE_KM } from '../lib/routeGeometry';
+import { checkCoordinateAgainstRoute } from '../lib/routeGeometry';
 import type { SummaryStats } from '../types';
 import { resolveGeminiModel, type GeminiModel } from '../lib/aiModels';
 import { parseJsonResponse, validateCriticalAnalysis, validateRouteFallback, validateWeatherResults } from '../lib/analysisValidation';
@@ -199,7 +199,7 @@ const criticalAnalysisAgent = async (ai: GeminiClient, model: GeminiModel, route
     Sadece gerçek rotaya ilişkin uyarı adaylarını ekle. timeOffsetHours mola dahil kalkıştan itibaren geçen süredir, ${durationHours.toFixed(2)} saati aşamaz.
     Kaynağı, olay zamanı veya rota ilişkisi belirsizse kesin olay iddiası yazma. Harita tır kısıtlarını doğrulamıyor.
   `;
-  return generateWithTelemetry(ai, { model, contents: prompt, config: { tools: [{ googleSearch: {} }] } }, 'critical', model, validateCriticalAnalysis, options);
+  return generateWithTelemetry(ai, { model, contents: prompt, config: { tools: [{ googleSearch: {} }] } }, 'critical', model, value => validateCriticalAnalysis(value, { dropInvalidPoints: true }), options);
 };
 
 export const analyzeRoute = async (originName: string, destinationName: string, originCoords?: string, destCoords?: string, options?: RouteOptions): Promise<RouteAnalysis> => {
@@ -210,6 +210,7 @@ export const analyzeRoute = async (originName: string, destinationName: string, 
   const routeData = await routeAgent(ai, model, originName, destinationName, originCoords, destCoords, options);
   const criticalResult = await criticalAnalysisAgent(ai, model, routeData.routeDescription, originName, destinationName, routeData.estimatedArrivalHours, routeData.summary, options);
   const analysis = criticalResult.data;
+  const omittedMalformedPoints = typeof analysis.invalidCriticalPointCount === 'number' ? analysis.invalidCriticalPointCount : 0;
   const criticalPoints = analysis.criticalPoints as CriticalPoint[];
   // Every Gemini point is checked, including points whose incident type is "break".
   // Proximity only makes it a corridor candidate; it does not validate the place name or incident.
@@ -228,7 +229,6 @@ export const analyzeRoute = async (originName: string, destinationName: string, 
   const corridorPoints = assessedPoints.filter(point => point.routeVerification.status !== 'off_corridor');
   const routeCheckedPoints = corridorPoints.filter(point => hasDirectSource(point.incident.source));
   const omittedUnsourcedPoints = corridorPoints.length - routeCheckedPoints.length;
-  const routeGeometryAvailable = assessedPoints.some(point => point.routeVerification.status !== 'unverified');
   const locations: { name: string; role: 'origin' | 'destination' | 'waypoint'; timeOffset: number }[] = [{ name: originName, role: 'origin', timeOffset: 0 }];
   routeCheckedPoints.forEach(point => locations.push({ name: point.weather.location, role: 'waypoint', timeOffset: point.timeOffsetHours ?? routeData.estimatedArrivalHours / 2 }));
   locations.push({ name: destinationName, role: 'destination', timeOffset: routeData.estimatedArrivalHours });
@@ -247,7 +247,8 @@ export const analyzeRoute = async (originName: string, destinationName: string, 
       ...routeData.summary,
       sourceCoverage: 'unverified',
       omittedUnsourcedPoints,
-      routeNotice: `${routeData.summary.routeNotice ?? ''} Zorunlu kaza ve yol çalışması kaynakları bu raporda tek tek doğrulanmadı; uyarı bulunmaması olay olmadığı anlamına gelmez. ${routeGeometryAvailable ? `Maps çizgisine ${ROUTE_CORRIDOR_TOLERANCE_KM} km içinde olan Gemini koordinatları yalnızca rota koridoru adayıdır; yer adı ve olay doğrulanmış değildir. Koridor dışındaki noktalar rapordan çıkarıldı.` : 'Maps çizgi geometrisi doğrulanamadı; Gemini koordinatları rotaya göre doğrulanmamıştır.'} Koordinatsız Gemini risk bölgeleri kullanılmadı; rota şeması yalnızca başlangıç ve varışı gösterir.`.trim()
+      omittedMalformedPoints,
+      routeNotice: routeData.summary.routeNotice
     },
     weather: {
       origin: { ...weatherOrigin, location: originName }, destination: { ...weatherDestination, location: destinationName },

@@ -95,7 +95,6 @@ test('full Maps-backed flow forwards each allowlisted model and emits metered Se
       assert.equal(analysis.summary.breakDuration, '0 sa 45 dk');
       assert.equal(analysis.routeSchematic?.nodes.at(-1)?.timeFromStart, analysis.summary.estimatedDuration);
       assert.match(analysis.summary.routeNotice!, /otomobil/);
-      assert.match(analysis.summary.routeNotice!, /uyarı bulunmaması olay olmadığı anlamına gelmez/);
       assert.equal(analysis.summary.sourceCoverage, 'unverified');
       assert.equal(calls.length, 2);
       assert.deepEqual(calls.map(call => call.model), [model, model]);

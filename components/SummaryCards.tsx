@@ -75,13 +75,21 @@ export const SummaryCards: React.FC<SummaryCardsProps> = ({ data, weather }) => 
 
         <div className="mt-4 pt-4 border-t border-slate-700/50 print:border-slate-300 z-10 flex items-center justify-between">
           <div>
-            <span className="text-xs text-rose-400 print:text-rose-600 font-bold block">ZORUNLU MOLA</span>
+            <span className="text-xs text-rose-400 print:text-rose-600 font-bold block">PLANLANAN MOLA</span>
             <span className="text-lg font-bold">{data.mandatoryBreak && data.mandatoryBreak !== '-' ? data.mandatoryBreak : 'Gerekli Değil'}</span>
           </div>
-          <div className="text-right max-w-[180px]">
-            <span className="text-[10px] text-slate-400 print:text-slate-600 leading-tight block" role="note">
-              {data.routeNotice || data.breakNote || 'Toplam süreye yasal dinlenme molaları dahildir.'}
-            </span>
+          <div className="max-w-[55%] text-right">
+            <details className="group">
+              <summary className="flex min-h-11 cursor-pointer items-center justify-end text-xs font-medium text-cyan-200 underline underline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-300 print:hidden">
+                Rota varsayımlarını göster
+              </summary>
+              <p className="mt-2 max-h-32 overflow-y-auto text-left text-xs leading-5 text-slate-200 print:hidden">
+                {data.routeNotice || data.breakNote || 'Rota varsayımları kaydedilmedi.'}
+              </p>
+            </details>
+            <p className="hidden text-left text-xs leading-5 text-slate-600 print:block">
+              {data.routeNotice || data.breakNote || 'Rota varsayımları kaydedilmedi.'}
+            </p>
           </div>
         </div>
         <p className="mt-2 text-[10px] text-slate-400 print:text-slate-600">

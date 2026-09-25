@@ -15,6 +15,11 @@ export function SourceCoverageNotice({ summary }: { summary: SummaryStats }) {
           Modelin doğrudan kaynak bağlantısı vermediği {summary.omittedUnsourcedPoints} rota adayı rapora alınmadı.
         </p>
       ) : null}
+      {summary.omittedMalformedPoints ? (
+        <p className="mt-1 text-sm leading-6">
+          Modelin eksik veya geçersiz alanlarla verdiği {summary.omittedMalformedPoints} nokta adayı rapora alınmadı.
+        </p>
+      ) : null}
     </section>
   );
 }

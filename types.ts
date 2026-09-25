@@ -11,6 +11,7 @@ export interface SummaryStats {
   routeNotice?: string;
   sourceCoverage?: 'unverified' | 'verified';
   omittedUnsourcedPoints?: number;
+  omittedMalformedPoints?: number;
   generatedAt?: string;
 }
 

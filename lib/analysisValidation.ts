@@ -106,7 +106,15 @@ export function validateWeatherResults(value: unknown): WeatherInfo[] {
   return value.map((item, index) => expectWeather(item, `weather[${index}]`));
 }
 
-export function validateCriticalAnalysis(value: unknown): UnknownRecord {
+export function validateCriticalAnalysis(value: unknown, options: { dropInvalidPoints?: boolean } = {}): UnknownRecord {
+  if (isRecord(value) && options.dropInvalidPoints) {
+    // These model-generated fields are not used in the report; malformed extras
+    // must not discard valid, source-backed point candidates.
+    value.riskIntensity = [];
+    value.timeline = [];
+    value.riskTypes = [];
+    value.routeSchematic = { nodes: [], totalDistance: '-', totalDuration: '-' };
+  }
   if (!isRecord(value) || !Array.isArray(value.criticalPoints) ||
       (value.riskIntensity !== undefined && !Array.isArray(value.riskIntensity)) ||
       (value.timeline !== undefined && !Array.isArray(value.timeline))) {
@@ -131,16 +139,28 @@ export function validateCriticalAnalysis(value: unknown): UnknownRecord {
       : /origin|departure|başlangıç/.test(key) ? 'start' : /critical|hazard|risk|uyarı/.test(key) ? 'warning' : 'info';
     if (rawType !== item.type && isString(rawType)) item.rawType = rawType;
   });
+  const validPoints: UnknownRecord[] = [];
+  let invalidCriticalPointCount = 0;
   value.criticalPoints.forEach((item, index) => {
-    if (!isRecord(item) || !isCoordinate(item.coordinate) || (item.timeOffsetHours !== undefined && (!isNumber(item.timeOffsetHours) || item.timeOffsetHours < 0)) || !isRecord(item.traffic) || !isRecord(item.incident)) throw new Error(`criticalPoints[${index}] requires valid coordinates, time offset, traffic and incident objects.`);
-    item.id = isNonEmptyString(item.id) ? item.id : `point-${index}`;
-    item.weather = expectWeather(item.weather, `criticalPoints[${index}].weather`);
-    if (!isRecord(item.traffic) || !isNonEmptyString(item.traffic.description) || !isRecord(item.incident) || !isNonEmptyString(item.incident.description)) throw new Error(`criticalPoints[${index}] has invalid traffic or incident data.`);
-    item.traffic.status = normalizeTraffic(item.traffic.status, `criticalPoints[${index}].traffic.status`);
-    const incidentRawType = item.incident.type;
-    item.incident.type = normalizeIncident(incidentRawType, `criticalPoints[${index}].incident.type`);
-    if (incidentRawType !== item.incident.type) item.incident.rawType = incidentRawType;
+    try {
+      if (!isRecord(item) || !isCoordinate(item.coordinate) || (item.timeOffsetHours !== undefined && (!isNumber(item.timeOffsetHours) || item.timeOffsetHours < 0)) || !isRecord(item.traffic) || !isRecord(item.incident)) throw new Error(`criticalPoints[${index}] requires valid coordinates, time offset, traffic and incident objects.`);
+      item.id = isNonEmptyString(item.id) ? item.id : `point-${index}`;
+      item.weather = expectWeather(item.weather, `criticalPoints[${index}].weather`);
+      if (!isRecord(item.traffic) || !isNonEmptyString(item.traffic.description) || !isRecord(item.incident) || !isNonEmptyString(item.incident.description)) throw new Error(`criticalPoints[${index}] has invalid traffic or incident data.`);
+      item.traffic.status = normalizeTraffic(item.traffic.status, `criticalPoints[${index}].traffic.status`);
+      const incidentRawType = item.incident.type;
+      item.incident.type = normalizeIncident(incidentRawType, `criticalPoints[${index}].incident.type`);
+      if (incidentRawType !== item.incident.type) item.incident.rawType = incidentRawType;
+      validPoints.push(item);
+    } catch (error) {
+      if (!options.dropInvalidPoints) throw error;
+      invalidCriticalPointCount += 1;
+    }
   });
+  if (options.dropInvalidPoints) {
+    value.criticalPoints = validPoints;
+    value.invalidCriticalPointCount = invalidCriticalPointCount;
+  }
   if (!isRecord(value.routeSchematic)) value.routeSchematic = { nodes: [], totalDistance: '-', totalDuration: '-' };
   const schematic = value.routeSchematic as UnknownRecord;
   if (!Array.isArray(schematic.nodes)) schematic.nodes = [];

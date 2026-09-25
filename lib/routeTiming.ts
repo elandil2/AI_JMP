@@ -37,7 +37,7 @@ export function mapsTiming(
       durationLabel: 'Tır planlama tahmini (mola dahil)',
       mandatoryBreak: breaks.totalBreakMinutes > 0 ? 'Planlı mola var' : 'Bu hesapta mola yok',
       breakNote: `${formatHours(drivingHours)} tahmini sürüş + ${formatHours(breaks.totalBreakMinutes / 60)} mola/dinlenme = ${formatHours(totalHours)}. Bu yalnızca planlama simülasyonudur: 4,5 saatlik modellenen sürüşte 45 dk ara, 9 saatlik modellenen günlük sürüşten sonra yolculuk sürüyorsa 11 saat dinlenme eklenir. Gerçek sürüş/takograf hesabı değildir; önceki sürüş ve sürücünün mevcut takograf durumu bilinmiyor.`,
-      routeNotice: `Mesafe ve güzergâh Google Maps otomobil rotasıdır; tır güzergâhı ve yasal kısıtlar doğrulanmaz. Mesafeden ${planningSpeedText} km/sa ortalama tır planlama hızıyla tahmin yapılır (yapılandırılabilir aralık ${MIN_TRUCK_PLANNING_SPEED_KMH}–${MAX_TRUCK_PLANNING_SPEED_KMH} km/sa); Google Maps veya trafik süresi daha uzunsa o süre alt sınır olarak kullanılır. Bu değer gerçek araç hızı ya da sürücünün yasal sürüş hakkı değildir.`,
+      routeNotice: `Google Maps otomobil rotasıdır; tır kısıtları doğrulanmadı. ${planningSpeedText} km/sa ortalama planlama hızı, gerçek sürüş hakkı değildir.`,
       generatedAt: new Date().toISOString()
     }
   };
