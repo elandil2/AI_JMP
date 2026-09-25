@@ -217,7 +217,17 @@ export const analyzeRoute = async (originName: string, destinationName: string, 
     const routeVerification = checkCoordinateAgainstRoute(routeData.mapsPolyline, point.coordinate);
     return { ...point, routeVerification };
   });
-  const routeCheckedPoints = assessedPoints.filter(point => point.routeVerification.status !== 'off_corridor');
+  const hasDirectSource = (source: string | undefined) => {
+    if (!source) return false;
+    try {
+      return ['https:', 'http:'].includes(new URL(source).protocol);
+    } catch {
+      return false;
+    }
+  };
+  const corridorPoints = assessedPoints.filter(point => point.routeVerification.status !== 'off_corridor');
+  const routeCheckedPoints = corridorPoints.filter(point => hasDirectSource(point.incident.source));
+  const omittedUnsourcedPoints = corridorPoints.length - routeCheckedPoints.length;
   const routeGeometryAvailable = assessedPoints.some(point => point.routeVerification.status !== 'unverified');
   const locations: { name: string; role: 'origin' | 'destination' | 'waypoint'; timeOffset: number }[] = [{ name: originName, role: 'origin', timeOffset: 0 }];
   routeCheckedPoints.forEach(point => locations.push({ name: point.weather.location, role: 'waypoint', timeOffset: point.timeOffsetHours ?? routeData.estimatedArrivalHours / 2 }));
@@ -236,6 +246,7 @@ export const analyzeRoute = async (originName: string, destinationName: string, 
     summary: {
       ...routeData.summary,
       sourceCoverage: 'unverified',
+      omittedUnsourcedPoints,
       routeNotice: `${routeData.summary.routeNotice ?? ''} Zorunlu kaza ve yol çalışması kaynakları bu raporda tek tek doğrulanmadı; uyarı bulunmaması olay olmadığı anlamına gelmez. ${routeGeometryAvailable ? `Maps çizgisine ${ROUTE_CORRIDOR_TOLERANCE_KM} km içinde olan Gemini koordinatları yalnızca rota koridoru adayıdır; yer adı ve olay doğrulanmış değildir. Koridor dışındaki noktalar rapordan çıkarıldı.` : 'Maps çizgi geometrisi doğrulanamadı; Gemini koordinatları rotaya göre doğrulanmamıştır.'} Koordinatsız Gemini risk bölgeleri kullanılmadı; rota şeması yalnızca başlangıç ve varışı gösterir.`.trim()
     },
     weather: {

@@ -10,6 +10,7 @@ export interface SummaryStats {
   durationLabel?: string;
   routeNotice?: string;
   sourceCoverage?: 'unverified' | 'verified';
+  omittedUnsourcedPoints?: number;
   generatedAt?: string;
 }
 

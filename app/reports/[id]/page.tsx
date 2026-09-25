@@ -199,7 +199,10 @@ export default function OperatorReportPage() {
                 <SourceCoverageNotice summary={report.analysis.summary} />
 
                 {/* Risk Charts */}
-                <RiskCharts intensityData={report.analysis.riskIntensity} typeData={report.analysis.riskTypes} />
+                <RiskCharts
+                  intensityData={report.analysis.summary.sourceCoverage === 'verified' ? report.analysis.riskIntensity : []}
+                  typeData={report.analysis.summary.sourceCoverage === 'verified' ? report.analysis.riskTypes : []}
+                />
 
                 {/* Critical Points Table */}
                 <section>

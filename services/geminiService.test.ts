@@ -9,7 +9,7 @@ type FakeResponse = { text: string; usageMetadata?: object; candidates?: object[
 const critical = JSON.stringify({
   riskIntensity: [{ name: 'Bolu', value: 50, color: '#123456' }],
   riskTypes: [], timeline: [{ title: 'Başlangıç', description: 'Yola çıkış', type: 'info' }],
-  criticalPoints: [{ id: '1', coordinate: '40.735,31.607', timeOffsetHours: 3.5, weather: { location: 'Bolu', temp: '8°C', condition: 'Parçalı bulutlu', icon: 'partly_cloudy' }, traffic: { status: 'normal', description: 'Akıcı trafik' }, incident: { type: 'terrain_hazard', description: 'Dağ geçidi' } }],
+  criticalPoints: [{ id: '1', coordinate: '40.735,31.607', timeOffsetHours: 3.5, weather: { location: 'Bolu', temp: '8°C', condition: 'Parçalı bulutlu', icon: 'partly_cloudy' }, traffic: { status: 'normal', description: 'Akıcı trafik' }, incident: { type: 'terrain_hazard', description: 'Dağ geçidi', source: 'https://example.test/road' } }],
   routeSchematic: { nodes: [{ name: 'İstanbul', type: 'origin', distanceFromStart: '0 km', timeFromStart: '0s 0dk' }, { name: 'Bolu', type: 'critical', distanceFromStart: '260 km', timeFromStart: '3s 30dk' }, { name: 'Düzce', type: 'intermediate', distanceFromStart: '220 km', timeFromStart: '3s 0dk' }], totalDistance: '450 km', totalDuration: '5s 30dk' },
   mandatoryBreak: 'Gerekir', breakNote: '45 dakika mola'
 });
@@ -166,6 +166,28 @@ test('off-corridor Gemini critical points are omitted from the returned route wa
       assert.deepEqual(analysis.timeline.map(event => event.title), ['Origin', 'Destination']);
       assert.deepEqual(analysis.routeSchematic?.nodes.map(node => node.type), ['origin', 'destination']);
       assert.doesNotMatch(JSON.stringify(analysis), /Bolu|RemoteBreakPoint|Yapay mola noktası/);
+    } finally { restoreFetch(); }
+  });
+});
+
+test('an on-corridor incident without a direct source is omitted, not presented as a verified road event', async () => {
+  await withApiKey(async () => {
+    const calls: RequestParams[] = [];
+    const restoreFetch = installMapsFetch({
+      ...mapsPayload,
+      routes: [{ ...mapsPayload.routes[0], overview_polyline: { points: canonicalPolyline } }]
+    });
+    process.env.GOOGLE_MAPS_API_KEY = 'test-maps-key';
+    const unsourced = JSON.parse(critical);
+    unsourced.criticalPoints[0].coordinate = '38.5,-120.2';
+    delete unsourced.criticalPoints[0].incident.source;
+    installFakeGemini([metered(JSON.stringify(unsourced)), metered(weather)], calls);
+    try {
+      const analysis = await analyzeRoute('Origin', 'Destination', '1,1', '2,2', { useTolls: true });
+      assert.deepEqual(analysis.criticalPoints, []);
+      assert.equal(analysis.summary.omittedUnsourcedPoints, 1);
+      assert.deepEqual(analysis.timeline.map(item => item.title), ['Origin', 'Destination']);
+      assert.deepEqual(analysis.weather.waypoints, []);
     } finally { restoreFetch(); }
   });
 });

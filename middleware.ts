@@ -58,7 +58,8 @@ export async function middleware(request: NextRequest) {
         "/",
         "/login",
         "/forgot-password",
-        "/reset-password"
+        "/reset-password",
+        "/r"
     ];
 
     // Specific API routes that should be public

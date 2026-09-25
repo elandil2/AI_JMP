@@ -10,6 +10,11 @@ export function SourceCoverageNotice({ summary }: { summary: SummaryStats }) {
         Bu raporda kaza kara noktası ve yol çalışması kaynakları tek tek zorunlu olarak kontrol edilmedi.
         Bir uyarı görünmemesi, güzergâhta olay olmadığı anlamına gelmez.
       </p>
+      {summary.omittedUnsourcedPoints ? (
+        <p className="mt-1 text-sm leading-6">
+          Modelin doğrudan kaynak bağlantısı vermediği {summary.omittedUnsourcedPoints} rota adayı rapora alınmadı.
+        </p>
+      ) : null}
     </section>
   );
 }
