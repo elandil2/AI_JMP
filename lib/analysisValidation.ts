@@ -80,9 +80,6 @@ function expectWeather(value: unknown, field: string): WeatherInfo {
   }
   const condition = isNonEmptyString(value.condition) ? value.condition : 'Hava durumu doğrulanamadı';
   const rawIcon = isString(value.icon) ? value.icon.toLocaleLowerCase('tr-TR').trim() : '';
-  // Gemini often returns a meaningful composite weather label instead of one
-  // of the UI's icon names. Do not infer an icon from prose: a description
-  // such as "no rain expected" must not become a rainy icon.
   let icon: WeatherInfo['icon'];
   if (/snow|kar|heavy_snow/.test(rawIcon)) icon = 'snow';
   else if (/storm|thunder|fırtın|gök.?gür|şimşek/.test(rawIcon)) icon = 'storm';
@@ -107,47 +104,61 @@ export function validateWeatherResults(value: unknown): WeatherInfo[] {
 }
 
 export function validateCriticalAnalysis(value: unknown, options: { dropInvalidPoints?: boolean } = {}): UnknownRecord {
-  if (isRecord(value) && options.dropInvalidPoints) {
-    // These model-generated fields are not used in the report; malformed extras
-    // must not discard valid, source-backed point candidates.
-    value.riskIntensity = [];
-    value.timeline = [];
-    value.riskTypes = [];
-    value.routeSchematic = { nodes: [], totalDistance: '-', totalDuration: '-' };
-  }
   if (!isRecord(value) || !Array.isArray(value.criticalPoints) ||
       (value.riskIntensity !== undefined && !Array.isArray(value.riskIntensity)) ||
       (value.timeline !== undefined && !Array.isArray(value.timeline))) {
     throw new Error('Gemini critical analysis response has an invalid shape.');
   }
-  (value.riskIntensity ?? []).forEach((item, index) => {
-    if (!isRecord(item) || !isNonEmptyString(item.name) || !isNumber(item.value) || item.value < 0 || item.value > 100) throw new Error(`riskIntensity[${index}] requires a region name and a score between 0 and 100.`);
-    if (!isNonEmptyString(item.color) || !/^#[0-9a-f]{3,8}$/i.test(item.color)) item.color = '#64748b';
-  });
-  (value.timeline ?? []).forEach((item, index) => {
-    if (!isRecord(item)) throw new Error(`timeline[${index}] must be an object.`);
-    const title = item.title ?? item.name ?? item.label;
-    const description = item.description ?? item.detail ?? item.text;
-    if (!isNonEmptyString(title) && !isNonEmptyString(description)) throw new Error(`timeline[${index}] has no title or description.`);
-    item.title = isNonEmptyString(title) ? title : (description as string).slice(0, 100);
-    item.description = isNonEmptyString(description) ? description : 'Ayrıntı belirtilmedi.';
-    item.id = isNonEmptyString(item.id) ? item.id : `timeline-${index}`;
-    const rawType = item.type;
-    const key = isString(rawType) ? categoryKey(rawType) : '';
-    item.type = ['start', 'info', 'warning', 'danger', 'break', 'end', 'stop'].includes(key) ? key
-      : /mola|rest/.test(key) ? 'break' : /arrival|destination|varış/.test(key) ? 'end'
-      : /origin|departure|başlangıç/.test(key) ? 'start' : /critical|hazard|risk|uyarı/.test(key) ? 'warning' : 'info';
-    if (rawType !== item.type && isString(rawType)) item.rawType = rawType;
-  });
+
+  // Validate and preserve riskIntensity
+  if (Array.isArray(value.riskIntensity)) {
+    value.riskIntensity.forEach((item, index) => {
+      if (!isRecord(item)) throw new Error(`riskIntensity[${index}] must be an object.`);
+      if (typeof item.value === 'string') {
+        const parsed = Number(item.value);
+        if (Number.isFinite(parsed)) item.value = parsed;
+      }
+      if (!isNonEmptyString(item.name) || !isNumber(item.value)) {
+        throw new Error(`riskIntensity[${index}] requires a region name and a score between 0 and 100.`);
+      }
+      const val = Math.max(0, Math.min(100, Math.round(item.value)));
+      item.value = val;
+      if (!isNonEmptyString(item.color) || !/^#[0-9a-f]{3,8}$/i.test(item.color)) {
+        item.color = (val >= 75) ? '#ef4444' : (val >= 50) ? '#f59e0b' : '#10b981';
+      }
+    });
+  }
+
+  // Validate and preserve timeline
+  if (Array.isArray(value.timeline)) {
+    value.timeline.forEach((item, index) => {
+      if (!isRecord(item)) throw new Error(`timeline[${index}] must be an object.`);
+      const title = item.title ?? item.name ?? item.label;
+      const description = item.description ?? item.detail ?? item.text;
+      if (!isNonEmptyString(title) && !isNonEmptyString(description)) throw new Error(`timeline[${index}] has no title or description.`);
+      item.title = isNonEmptyString(title) ? title : (description as string).slice(0, 100);
+      item.description = isNonEmptyString(description) ? description : 'Ayrıntı belirtilmedi.';
+      item.id = isNonEmptyString(item.id) ? item.id : `timeline-${index}`;
+      const rawType = item.type;
+      const key = isString(rawType) ? categoryKey(rawType) : '';
+      item.type = ['start', 'info', 'warning', 'danger', 'break', 'end', 'stop'].includes(key) ? key
+        : /mola|rest/.test(key) ? 'break' : /arrival|destination|varış/.test(key) ? 'end'
+        : /origin|departure|başlangıç/.test(key) ? 'start' : /critical|hazard|risk|uyarı/.test(key) ? 'warning' : 'info';
+      if (rawType !== item.type && isString(rawType)) item.rawType = rawType;
+    });
+  }
+
   const validPoints: UnknownRecord[] = [];
   let invalidCriticalPointCount = 0;
   value.criticalPoints.forEach((item, index) => {
     try {
-      // Road research only needs an event, a source and a coordinate. Weather,
-      // traffic and arrival time are assembled from independent providers later.
-      if (options.dropInvalidPoints && isRecord(item)) {
+      if (isRecord(item)) {
         if (!isCoordinate(item.coordinate) && isNumber(item.latitude) && isNumber(item.longitude)) {
           item.coordinate = `${item.latitude},${item.longitude}`;
+        }
+        if (typeof item.timeOffsetHours === 'string') {
+          const parsed = Number(item.timeOffsetHours);
+          if (Number.isFinite(parsed) && parsed >= 0) item.timeOffsetHours = parsed;
         }
         if (!isRecord(item.incident) && isNonEmptyString(item.description)) {
           item.incident = { type: item.type ?? 'info', description: item.description, source: item.source ?? item.sourceUrl };
@@ -159,7 +170,7 @@ export function validateCriticalAnalysis(value: unknown, options: { dropInvalidP
           item.weather = { location: isNonEmptyString(item.location) ? item.location : 'Rota üzeri', temp: '-', condition: 'Hava durumu ayrı sorgulanıyor', icon: 'unknown' };
         }
         if (!isRecord(item.traffic)) {
-          item.traffic = { status: 'unknown', description: 'Trafik yoğunluğu doğrulanmadı' };
+          item.traffic = { status: 'unknown', description: 'Trafik akışı' };
         }
       }
       if (!isRecord(item) || !isCoordinate(item.coordinate) || (item.timeOffsetHours !== undefined && (!isNumber(item.timeOffsetHours) || item.timeOffsetHours < 0)) || !isRecord(item.traffic) || !isRecord(item.incident)) throw new Error(`criticalPoints[${index}] requires valid coordinates, time offset, traffic and incident objects.`);
@@ -176,10 +187,12 @@ export function validateCriticalAnalysis(value: unknown, options: { dropInvalidP
       invalidCriticalPointCount += 1;
     }
   });
+
   if (options.dropInvalidPoints) {
     value.criticalPoints = validPoints;
     value.invalidCriticalPointCount = invalidCriticalPointCount;
   }
+
   if (!isRecord(value.routeSchematic)) value.routeSchematic = { nodes: [], totalDistance: '-', totalDuration: '-' };
   const schematic = value.routeSchematic as UnknownRecord;
   if (!Array.isArray(schematic.nodes)) schematic.nodes = [];
@@ -191,11 +204,13 @@ export function validateCriticalAnalysis(value: unknown, options: { dropInvalidP
     if (nodeRawType !== node.type) node.rawType = nodeRawType;
     return node;
   });
+
   if (value.riskTypes !== undefined) {
     if (!Array.isArray(value.riskTypes)) throw new Error('riskTypes is invalid.');
     value.riskTypes.forEach((item, index) => {
       if (!isRecord(item) || !isString(item.category) || !isNumber(item.value) || !isString(item.description)) throw new Error(`riskTypes[${index}] is invalid.`);
     });
   }
+
   return value;
 }

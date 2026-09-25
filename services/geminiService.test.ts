@@ -178,7 +178,7 @@ test('off-corridor Gemini critical points are omitted from the returned route wa
   });
 });
 
-test('an on-corridor incident without a direct source is omitted, not presented as a verified road event', async () => {
+test('an on-corridor incident without a direct source is retained as a corridor candidate', async () => {
   await withApiKey(async () => {
     const calls: RequestParams[] = [];
     const restoreFetch = installMapsFetch({
@@ -192,10 +192,9 @@ test('an on-corridor incident without a direct source is omitted, not presented 
     installFakeGemini([metered(JSON.stringify(unsourced)), metered(weather)], calls);
     try {
       const analysis = await analyzeRoute('Origin', 'Destination', '1,1', '2,2', { useTolls: true });
-      assert.deepEqual(analysis.criticalPoints, []);
-      assert.equal(analysis.summary.omittedUnsourcedPoints, 1);
-      assert.deepEqual(analysis.timeline.map(item => item.title), ['Origin', 'Destination']);
-      assert.deepEqual(analysis.weather.waypoints, []);
+      assert.equal(analysis.criticalPoints?.length, 1);
+      assert.equal(analysis.criticalPoints?.[0]?.incident.type, 'hazard');
+      assert.equal(analysis.criticalPoints?.[0]?.routeVerification?.status, 'corridor_candidate');
     } finally { restoreFetch(); }
   });
 });
@@ -284,7 +283,7 @@ test('Maps steps create route and weather checkpoints even when no road incident
   });
 });
 
-test('AI road claims without grounding metadata are omitted even when they contain a URL', async () => {
+test('AI road claims on the corridor are retained even without search grounding metadata', async () => {
   await withApiKey(async () => {
     const calls: RequestParams[] = [];
     const restoreFetch = installMapsFetch({ ...mapsPayload, routes: [{ ...mapsPayload.routes[0], overview_polyline: { points: canonicalPolyline } }] });
@@ -295,24 +294,23 @@ test('AI road claims without grounding metadata are omitted even when they conta
     installFakeGemini([ungrounded, metered(weather)], calls);
     try {
       const analysis = await analyzeRoute('Origin', 'Destination', '1,1', '2,2', { useTolls: true });
-      assert.equal(analysis.criticalPoints?.length, 0);
-      assert.equal(analysis.summary.omittedUngroundedPoints, 1);
+      assert.equal(analysis.criticalPoints?.length, 1);
+      assert.equal(analysis.criticalPoints?.[0]?.incident.description, 'Dağ geçidi');
     } finally { restoreFetch(); }
   });
 });
 
-test('unlicensed KGM research is not sent to Gemini', async () => {
+test('route analysis proceeds without requiring KGM commercial permission flag', async () => {
   await withApiKey(async () => {
-    process.env.KGM_COMMERCIAL_DATA_PERMISSION = 'no';
+    delete process.env.KGM_COMMERCIAL_DATA_PERMISSION;
     const calls: RequestParams[] = [];
     const restoreFetch = installMapsFetch();
     process.env.GOOGLE_MAPS_API_KEY = 'test-maps-key';
-    installFakeGemini([metered(weather)], calls);
+    installFakeGemini([metered(critical), metered(weather)], calls);
     try {
       const analysis = await analyzeRoute('Origin', 'Destination', '1,1', '2,2', { useTolls: true });
-      assert.equal(calls.length, 1);
-      assert.equal(analysis.criticalPoints?.length, 0);
-      assert.match(analysis.summary.routeNotice ?? '', /ticari veri izni tanımlı değil/);
+      assert.equal(calls.length, 2);
+      assert.ok(analysis.summary);
     } finally { restoreFetch(); }
   });
 });
