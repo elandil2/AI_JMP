@@ -77,7 +77,7 @@ test('keeps on-corridor construction and closure candidates and filters events o
   assert.match(requestedUrl!.pathname, /\/mapbox\/driving-traffic\//);
   assert.equal(requestedUrl!.searchParams.get('geometries'), 'geojson');
   assert.equal(requestedUrl!.searchParams.get('overview'), 'full');
-  assert.equal(requestedUrl!.searchParams.get('annotations'), 'closure');
+  assert.equal(requestedUrl!.searchParams.get('annotations'), 'closure,congestion,congestion_numeric,distance');
   assert.equal(requestedUrl!.searchParams.get('depart_at'), 'now');
   assert.equal(requestedUrl!.searchParams.get('access_token'), 'test-mapbox-token');
   assert.ok(result.incidents.every((incident) => !JSON.stringify(incident).includes('test-mapbox-token')));
@@ -94,6 +94,21 @@ test('reports an empty provider result as unknown coverage, never as a clear rou
   assert.equal(result.status, 'unknown');
   assert.equal(result.coverageReason, 'no_incidents_returned');
   assert.deepEqual(result.incidents, []);
+});
+
+test('measures annotated traffic coverage without calling unknown road segments clear', async () => {
+  const result = await retrieveMapboxDrivingIncidents({
+    googleEncodedPolyline: googlePolyline,
+    token: 'test-mapbox-token',
+    fetchImpl: async () => responseFor([{ annotation: {
+      distance: [1_000, 2_000, 3_000], congestion: ['low', 'heavy', 'unknown'], congestion_numeric: [10, 80, null]
+    } }]), now
+  });
+  assert.equal(result.status, 'unknown');
+  assert.equal(result.trafficCoverage?.knownPercent, 50);
+  assert.equal(result.trafficCoverage?.annotatedDistanceKm, 6);
+  assert.equal(result.trafficCoverage?.heavyDistanceKm, 2);
+  assert.equal(result.incidents.length, 0);
 });
 
 test('missing token reports unavailable coverage and does not make a network request', async () => {

@@ -21,7 +21,7 @@ export function SourceCoverageNotice({ analysis }: { analysis: RouteAnalysis }) 
         Bir uyarı görünmemesi, güzergâhta olay olmadığı anlamına gelmez.
       </p>
       <p className="mt-1 text-sm leading-6">
-        Trafik sağlayıcısı kapsamı: {summary.incidentProviderCoverage === 'available' ? 'rota koridorunda olay adayı bulundu' : summary.incidentProviderCoverage === 'partial' ? 'rotanın bir kısmı sorgulanabildi' : summary.incidentProviderCoverage === 'unknown' ? 'olay dönmedi; kapsama kesinleşmedi' : 'sağlayıcı verisi alınamadı'}.
+        Yol olayı verisi: {summary.incidentProviderCoverage === 'available' ? 'rota koridorunda olay adayı bulundu' : summary.incidentProviderCoverage === 'partial' ? 'rotanın bir kısmı sorgulanabildi' : summary.incidentProviderCoverage === 'unknown' ? 'olay dönmedi; kapsama kesinleşmedi' : 'sağlayıcı verisi alınamadı'}.
       </p>
       {summary.omittedUnsourcedPoints ? (
         <p className="mt-1 text-sm leading-6">

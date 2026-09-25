@@ -11,6 +11,13 @@ export interface SummaryStats {
   routeNotice?: string;
   sourceCoverage?: 'unverified' | 'verified';
   incidentProviderCoverage?: 'available' | 'partial' | 'unknown' | 'unavailable';
+  mapboxTrafficCoverage?: {
+    routeDistanceKm: number;
+    knownDistanceKm: number;
+    knownPercent: number;
+    moderateDistanceKm: number;
+    heavyDistanceKm: number;
+  };
   omittedUnsourcedPoints?: number;
   omittedUngroundedPoints?: number;
   omittedMalformedPoints?: number;

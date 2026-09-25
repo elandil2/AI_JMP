@@ -28,6 +28,8 @@ Normal kullanımın varsayılan modeli **Gemini 3.7 Flash**. 2.5 ve 3.8 yönetic
 
 `MAPBOX_TOKEN` varsa Mapbox olayları kontrol edilir. `TOMTOM_API_KEY` varsa Türkiye kapsaması belgelenmiş TomTom kaza, şerit/yol kapanması ve yol çalışması adayları ayrıca sorgulanır; anahtar yoksa bu kaynak kapsamı mevcut sayılmaz. Her iki sağlayıcının Google rotasına yakın olayları yalnızca **koridor adayıdır**; aynı yol ve yön teyidi değildir. KGM sayfalarının ticari otomatik kullanımı için ayrıca kullanım hakkı gerekir; `KGM_COMMERCIAL_DATA_PERMISSION=yes` olmadan modelin KGM araştırma aşaması çalışmaz ve bağlantıları manuel kontrol içindir. Google Weather API adaptörü hazırlanmıştır, ancak mevcut proje anahtarı 403 döndürdüğü ve saatlik tahminlerin saklama sınırı bulunduğu için kalıcı rapora bağlanmamıştır.
 
+Mapbox'ın aynı mevcut rota çağrısından trafik seviyesi bilinen kilometre/pay da hesaplanır. Bu **Mapbox otomobil rotasının ölçüm kapsamıdır**, Google hattındaki kaza veya yol çalışması yoğunluğu değildir. 25 Eylül tarihli dokuz geçmiş Menemen varışı ölçümü [kapsama denetiminde](docs/MAPBOX_TRAFIK_KAPSAMA_2026-09-25.md) tutulur.
+
 ## Teknik özet
 
 Next.js 15, React 19, TypeScript, Supabase Auth/veritabanı ve Google Gemini (`@google/genai`). Kesin bağımlılık çözümlemesi `package-lock.json` içindedir.

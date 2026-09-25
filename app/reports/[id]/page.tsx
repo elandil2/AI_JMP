@@ -206,6 +206,7 @@ export default function OperatorReportPage() {
                 <RiskCharts
                   intensityData={report.analysis.riskIntensity}
                   typeData={report.analysis.riskTypes}
+                  trafficCoverage={report.analysis.summary.mapboxTrafficCoverage}
                 />
 
                 {/* Critical Points Table */}

@@ -74,7 +74,18 @@ export interface MapboxIncidentCoverage {
   incidents: MapboxTrafficIncident[];
   /** Raw incident and closure item count before Google-route corridor filtering. */
   providerItemCount: number;
+  /** Traffic-annotation coverage on Mapbox's own route, not on the Google route. */
+  trafficCoverage?: MapboxTrafficCoverage;
   coverageReason?: MapboxIncidentUnavailableReason | MapboxIncidentUnknownReason;
+}
+
+export interface MapboxTrafficCoverage {
+  annotatedDistanceKm: number;
+  knownDistanceKm: number;
+  knownPercent: number;
+  moderateDistanceKm: number;
+  heavyDistanceKm: number;
+  sampleCount: number;
 }
 
 export interface MapboxIncidentRequestOptions {
@@ -123,6 +134,11 @@ type MapboxDirectionsResponse = {
     legs?: Array<{
       incidents?: unknown;
       closures?: unknown;
+      annotation?: {
+        distance?: unknown;
+        congestion?: unknown;
+        congestion_numeric?: unknown;
+      };
     }>;
   }>;
 };
@@ -171,6 +187,7 @@ function unknownCoverage(
   fetchedAt: string,
   reason: MapboxIncidentUnknownReason,
   providerItemCount = 0,
+  trafficCoverage?: MapboxTrafficCoverage,
 ): MapboxIncidentCoverage {
   return {
     provider: 'Mapbox',
@@ -180,7 +197,42 @@ function unknownCoverage(
     sourceScope: MAPBOX_INCIDENT_SCOPE,
     incidents: [],
     providerItemCount,
+    trafficCoverage,
     coverageReason: reason,
+  };
+}
+
+/** Measures how much of the Mapbox route actually has traffic annotation values. */
+function readTrafficCoverage(legs: NonNullable<NonNullable<MapboxDirectionsResponse['routes']>[number]['legs']>): MapboxTrafficCoverage | undefined {
+  let annotatedMeters = 0;
+  let knownMeters = 0;
+  let moderateMeters = 0;
+  let heavyMeters = 0;
+  let sampleCount = 0;
+  for (const leg of legs) {
+    const distances = Array.isArray(leg.annotation?.distance) ? leg.annotation.distance : [];
+    const levels = Array.isArray(leg.annotation?.congestion) ? leg.annotation.congestion : [];
+    const numeric = Array.isArray(leg.annotation?.congestion_numeric) ? leg.annotation.congestion_numeric : [];
+    for (let index = 0; index < distances.length; index++) {
+      const meters = distances[index];
+      if (typeof meters !== 'number' || !Number.isFinite(meters) || meters < 0) continue;
+      annotatedMeters += meters;
+      sampleCount++;
+      const score = numeric[index];
+      const level = levels[index];
+      if (typeof score !== 'number' || !Number.isFinite(score) || score < 0 || score > 100 ||
+          !['low', 'moderate', 'heavy', 'severe'].includes(level)) continue;
+      knownMeters += meters;
+      if (level === 'moderate') moderateMeters += meters;
+      if (level === 'heavy' || level === 'severe') heavyMeters += meters;
+    }
+  }
+  if (annotatedMeters <= 0) return undefined;
+  const roundKm = (meters: number) => Math.round(meters / 100) / 10;
+  return {
+    annotatedDistanceKm: roundKm(annotatedMeters), knownDistanceKm: roundKm(knownMeters),
+    knownPercent: Math.round(knownMeters / annotatedMeters * 1000) / 10,
+    moderateDistanceKm: roundKm(moderateMeters), heavyDistanceKm: roundKm(heavyMeters), sampleCount
   };
 }
 
@@ -355,7 +407,7 @@ export async function retrieveMapboxDrivingIncidents(
   const url = new URL(`${MAPBOX_API_URL}/${origin.lng},${origin.lat};${destination.lng},${destination.lat}`);
   url.searchParams.set('geometries', 'geojson');
   url.searchParams.set('overview', 'full');
-  url.searchParams.set('annotations', 'closure');
+  url.searchParams.set('annotations', 'closure,congestion,congestion_numeric,distance');
   url.searchParams.set('depart_at', 'now');
   url.searchParams.set('access_token', token);
 
@@ -405,9 +457,10 @@ export async function retrieveMapboxDrivingIncidents(
 
         const providerIncidents = legs.flatMap((leg) => normalizeRawItems(leg.incidents));
         const providerClosures = legs.flatMap((leg) => normalizeRawClosures(leg.closures));
+        const trafficCoverage = readTrafficCoverage(legs);
         const providerItemCount = providerIncidents.length + providerClosures.length;
         if (providerItemCount === 0) {
-          resolve(unknownCoverage(fetchedAt, 'no_incidents_returned'));
+          resolve(unknownCoverage(fetchedAt, 'no_incidents_returned', 0, trafficCoverage));
           return;
         }
 
@@ -422,7 +475,7 @@ export async function retrieveMapboxDrivingIncidents(
         const incidents = [...byId.values()].sort((a, b) => a.routeProgress - b.routeProgress);
 
         if (incidents.length === 0) {
-          resolve(unknownCoverage(fetchedAt, 'no_google_corridor_candidates', providerItemCount));
+          resolve(unknownCoverage(fetchedAt, 'no_google_corridor_candidates', providerItemCount, trafficCoverage));
           return;
         }
 
@@ -434,6 +487,7 @@ export async function retrieveMapboxDrivingIncidents(
           sourceScope: MAPBOX_INCIDENT_SCOPE,
           incidents,
           providerItemCount,
+          trafficCoverage,
         });
       })().catch(() => resolve(unavailable(fetchedAt, 'request_failed')));
     });

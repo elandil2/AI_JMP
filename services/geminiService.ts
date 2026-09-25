@@ -331,6 +331,13 @@ export const analyzeRoute = async (originName: string, destinationName: string, 
       incidentProviderCoverage: tomtomCoverage?.status === 'available' || mapboxCoverage?.status === 'available'
         ? 'available' : tomtomCoverage?.status === 'partial' ? 'partial'
         : tomtomCoverage?.status === 'unknown' || mapboxCoverage?.status === 'unknown' ? 'unknown' : 'unavailable',
+      mapboxTrafficCoverage: mapboxCoverage?.trafficCoverage ? {
+        routeDistanceKm: mapboxCoverage.trafficCoverage.annotatedDistanceKm,
+        knownDistanceKm: mapboxCoverage.trafficCoverage.knownDistanceKm,
+        knownPercent: mapboxCoverage.trafficCoverage.knownPercent,
+        moderateDistanceKm: mapboxCoverage.trafficCoverage.moderateDistanceKm,
+        heavyDistanceKm: mapboxCoverage.trafficCoverage.heavyDistanceKm
+      } : undefined,
       omittedUnsourcedPoints,
       omittedUngroundedPoints,
       omittedMalformedPoints,
