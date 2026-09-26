@@ -73,3 +73,47 @@ export const findLocation = (cityInput: string, countyInput?: string): LocationM
 
   return { city: cityInput, county: countyInput, matched: false };
 };
+
+export const formatLocationName = (county?: string | null, city?: string | null): string => {
+  const cap = (s?: string | null) =>
+    s ? s.charAt(0).toLocaleUpperCase('tr-TR') + s.slice(1).toLocaleLowerCase('tr-TR') : '';
+  const cCity = cap(city);
+  const cCounty = cap(county);
+  if (cCounty && cCity && cCounty.toLocaleLowerCase('tr-TR') !== cCity.toLocaleLowerCase('tr-TR')) {
+    return `${cCounty}, ${cCity}`;
+  }
+  return cCity || cCounty || '';
+};
+
+export const findNearestLocation = (
+  lat: number,
+  lng: number
+): { city: string; county: string; distanceKm: number } | null => {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  const cities = loadCities();
+  let closest: { city: string; county: string; distanceKm: number } | null = null;
+  let minDist = Number.POSITIVE_INFINITY;
+
+  for (const city of cities) {
+    if (!city.counties?.length) continue;
+    for (const county of city.counties) {
+      if (!county.latitude || !county.longitude) continue;
+      const cLat = Number(county.latitude);
+      const cLng = Number(county.longitude);
+      if (!Number.isFinite(cLat) || !Number.isFinite(cLng)) continue;
+      const x = (lng - cLng) * Math.cos((lat * Math.PI) / 180);
+      const y = lat - cLat;
+      const d = Math.hypot(x, y);
+      if (d < minDist) {
+        minDist = d;
+        closest = {
+          city: city.name,
+          county: county.name,
+          distanceKm: Math.round(d * 111)
+        };
+      }
+    }
+  }
+  return closest;
+};
+

@@ -1,10 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { Navigation } from "lucide-react";
 import { SummaryCards } from "@/components/SummaryCards";
-import { SourceCoverageNotice } from "@/components/SourceCoverageNotice";
 import { RiskCharts } from "@/components/RiskCharts";
 import { CriticalPointsTable } from "@/components/CriticalPointsTable";
 import { RouteSchematic } from "@/components/RouteSchematic";
@@ -76,25 +75,34 @@ export default function PublicReportPage() {
     : "";
   const statusKind = report ? getReportStatusKind(report) : null;
   const hasAnalysis = statusKind === "ready" && Boolean(report?.analysis);
+  const breakPoints = useMemo(() => {
+    if (!report?.analysis?.criticalPoints) return [];
+    return (report.analysis.criticalPoints as any[])
+      .filter(cp => (cp.incident?.type === 'break' || cp.incident?.description?.toLowerCase().includes('mola')) && cp.coordinate && /^-?\d+(\.\d+)?,-?\d+(\.\d+)?$/.test(cp.coordinate.trim()));
+  }, [report?.analysis?.criticalPoints]);
+
+  const originCoordsStr = report?.origin_lat && report?.origin_lng
+    ? `${report.origin_lat},${report.origin_lng}`
+    : encodeURIComponent(originLabel);
+  const destCoordsStr = report?.destination_lat && report?.destination_lng
+    ? `${report.destination_lat},${report.destination_lng}`
+    : encodeURIComponent(destLabel);
+
+  const waypointsEmbed = breakPoints.length > 0
+    ? breakPoints.map(bp => bp.coordinate.trim()).join("+to:") + "+to:"
+    : "";
+
   const mapEmbedUrl =
     report && hasAnalysis
-      ? `https://maps.google.com/maps?saddr=${report.origin_lat && report.origin_lng
-        ? `${report.origin_lat},${report.origin_lng}`
-        : encodeURIComponent(originLabel)
-      }&daddr=${report.destination_lat && report.destination_lng
-        ? `${report.destination_lat},${report.destination_lng}`
-        : encodeURIComponent(destLabel)
-      }&dirflg=d&t=m&z=6&output=embed`
+      ? `https://maps.google.com/maps?saddr=${originCoordsStr}&daddr=${waypointsEmbed}${destCoordsStr}&dirflg=d&t=m&z=6&output=embed`
       : null;
 
+  const waypointsNav = breakPoints.length > 0
+    ? `&waypoints=${encodeURIComponent(breakPoints.map(bp => bp.coordinate.trim()).join("|"))}`
+    : "";
+
   const navigationUrl = hasAnalysis && report
-    ? `https://www.google.com/maps/dir/?api=1&origin=${report.origin_lat && report.origin_lng
-      ? `${report.origin_lat},${report.origin_lng}`
-      : encodeURIComponent(originLabel)
-    }&destination=${report.destination_lat && report.destination_lng
-      ? `${report.destination_lat},${report.destination_lng}`
-      : encodeURIComponent(destLabel)
-    }&travelmode=driving`
+    ? `https://www.google.com/maps/dir/?api=1&origin=${originCoordsStr}&destination=${destCoordsStr}${waypointsNav}&travelmode=driving`
     : "";
 
   return (
@@ -144,7 +152,6 @@ export default function PublicReportPage() {
               <div className="space-y-8">
                 {/* Summary Cards - Moved to top as requested */}
                 <SummaryCards data={report.analysis.summary} weather={report.analysis.weather} />
-                <SourceCoverageNotice analysis={report.analysis} />
 
                 {/* Risk Charts */}
                 <RiskCharts

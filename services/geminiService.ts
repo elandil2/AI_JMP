@@ -13,6 +13,7 @@ import { retrieveMapboxDrivingIncidents } from '../lib/mapboxIncidents';
 import { aggregateRouteWarnings } from '../lib/riskAggregation';
 import { retrieveTomTomIncidents } from '../lib/tomtomIncidents';
 import { buildRouteTimeline } from '../lib/routeTimelineBuilder';
+import { findNearestLocation, formatLocationName } from '../lib/location';
 
 type Stage = Extract<GenerationEvent['stage'], 'route' | 'critical' | 'weather'>;
 type UnknownRecord = Record<string, unknown>;
@@ -327,9 +328,48 @@ export const analyzeRoute = async (originName: string, destinationName: string, 
   const routeSchematic = routeData.routePlan
     ? { ...routeData.routePlan.routeSchematic, nodes: (() => {
       let checkpointIndex = 0;
-      return routeData.routePlan.routeSchematic.nodes.map(node => node.type === 'stop'
-        ? { ...node, name: `${placeLabels[checkpointIndex]?.label ?? checkpoints[checkpointIndex]?.name ?? node.name} · ${checkpoints[checkpointIndex++]?.roadLabel ?? 'Google Maps yolu'}` }
-        : node);
+      let breakIndex = 0;
+      const breakTargets = routeData.routePlan?.breakTargets ?? [];
+      return routeData.routePlan.routeSchematic.nodes.map(node => {
+        if (node.type === 'stop') {
+          const cp = checkpoints[checkpointIndex];
+          const labelObj = placeLabels[checkpointIndex++];
+          const road = (cp?.roadLabel || '').trim();
+          let place = (labelObj?.label || cp?.name || node.name).trim();
+
+          // Deduplicate if place is just a road code (like D300) or identical to road
+          if (/^[DDEO]-?\d+/i.test(place) || (road && place.toLowerCase() === road.toLowerCase())) {
+            const nearest = cp?.coordinate ? findNearestLocation(cp.coordinate.lat, cp.coordinate.lng) : null;
+            if (nearest) {
+              place = formatLocationName(nearest.county, nearest.city);
+            }
+          }
+
+          let finalName = place;
+          if (road && !place.toLowerCase().includes(road.toLowerCase())) {
+            finalName = `${place} · ${road}`;
+          }
+          return { ...node, name: finalName };
+        }
+
+        if (node.type === 'break') {
+          const target = breakTargets[breakIndex++];
+          if (target) {
+            const nearest = target.coordinate ? findNearestLocation(target.coordinate.lat, target.coordinate.lng) : null;
+            const placeStr = nearest ? formatLocationName(nearest.county, nearest.city) : 'Güzergâh Tesisleri';
+            const restLabel = target.kind === 'daily_rest' ? '11 sa Günlük Dinlenme' : '45 dk Mola';
+            const wholeHours = Math.floor(target.driveThresholdHours);
+            const minutes = Math.round((target.driveThresholdHours % 1) * 60);
+            const driveText = minutes > 0 ? `${wholeHours} sa ${minutes} dk` : `${wholeHours} sa`;
+            return {
+              ...node,
+              name: `${placeStr} · ${restLabel} (${driveText} sürüşten sonra)`
+            };
+          }
+        }
+
+        return node;
+      });
     })() }
     : reconcileSchematic(undefined, originName, destinationName, routeData.summary, routeData.estimatedArrivalHours);
 

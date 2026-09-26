@@ -85,12 +85,15 @@ export const SummaryCards: React.FC<SummaryCardsProps> = ({ data, weather }) => 
                 Rota varsayımlarını göster
               </summary>
               <p className="mt-2 max-h-32 overflow-y-auto text-left text-xs leading-5 text-slate-200 print:hidden">
-                {data.routeNotice || data.breakNote || 'Rota varsayımları kaydedilmedi.'}
+                {data.breakNote && <span className="block font-medium text-amber-200 mb-1">{data.breakNote}</span>}
+                {data.routeNotice && <span className="block text-slate-300">{data.routeNotice}</span>}
+                {!data.breakNote && !data.routeNotice && 'Rota varsayımları kaydedilmedi.'}
               </p>
             </details>
-            <p className="hidden text-left text-xs leading-5 text-slate-600 print:block">
-              {data.routeNotice || data.breakNote || 'Rota varsayımları kaydedilmedi.'}
-            </p>
+            <div className="hidden text-left text-xs leading-5 text-slate-600 print:block">
+              {data.breakNote && <p className="font-semibold text-slate-800 mb-1">{data.breakNote}</p>}
+              {data.routeNotice && <p>{data.routeNotice}</p>}
+            </div>
           </div>
         </div>
         <p className="mt-2 text-[10px] text-slate-400 print:text-slate-600">
