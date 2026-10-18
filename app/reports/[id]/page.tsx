@@ -151,7 +151,7 @@ export default function OperatorReportPage() {
         {report && hasAnalysis && (
           <div className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <div className="print-keep lg:col-span-2 bg-slate-100 border border-slate-200 rounded-2xl overflow-hidden min-h-[340px]">
+              <div className="print-keep lg:col-span-2 bg-slate-100 border border-slate-200 rounded-2xl overflow-hidden min-h-[340px] print:min-h-0">
                 <p className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-950">
                   Güncel Google haritası rotayı yeniden hesaplar; kayıtlı raporun mesafe ve süre hesabından farklı bir yol gösterebilir.
                 </p>
@@ -161,6 +161,7 @@ export default function OperatorReportPage() {
                     width="100%"
                     height="100%"
                     style={{ border: 0, minHeight: "340px" }}
+                    className="print:!h-[230px] print:!min-h-[230px]"
                     src={mapEmbedUrl}
                     allowFullScreen
                     loading="lazy"
@@ -222,7 +223,7 @@ export default function OperatorReportPage() {
 
                 {/* Route Schematic - Moved to bottom */}
                 {report.analysis.routeSchematic && report.analysis.routeSchematic.nodes && report.analysis.routeSchematic.nodes.length > 0 && (
-                  <section>
+                  <section className="print:hidden">
                     <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
                       <span className="text-2xl">📍</span> Rota Şeması
                     </h3>
