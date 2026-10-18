@@ -60,10 +60,13 @@ export default function BatchUploadPage() {
   const processFile = (selectedFile: File) => {
     if (!selectedFile.name.toLowerCase().endsWith(".csv")) { setError("Lütfen geçerli bir .csv dosyası yükleyin."); return; }
     setFile(selectedFile);
-    const reader = new FileReader();
-    reader.onload = (event) => { setCsv(event.target?.result as string); setError(null); };
-    reader.onerror = () => { setError("Dosya okunamadı."); setCsv(""); };
-    reader.readAsText(selectedFile, "utf-8");
+    selectedFile.arrayBuffer().then((buffer) => {
+      // Excel's plain "CSV" in Turkish Windows is Windows-1254, not UTF-8; reading it as UTF-8 garbles İ, ı, ş, ğ.
+      let text: string;
+      try { text = new TextDecoder("utf-8", { fatal: true }).decode(buffer); }
+      catch { text = new TextDecoder("windows-1254").decode(buffer); }
+      setCsv(text); setError(null);
+    }, () => { setError("Dosya okunamadı."); setCsv(""); });
   };
 
   const submit = async () => {
@@ -94,7 +97,7 @@ export default function BatchUploadPage() {
   return <div className="min-h-screen bg-slate-50">
     <Header />
     <main className="mx-auto w-full max-w-5xl space-y-6 px-4 py-6 lg:px-8 lg:py-10">
-      <div><p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Toplu Rota</p><h1 className="text-2xl font-bold text-slate-900">CSV Kuyruğu</h1><p className="text-sm text-slate-600">En fazla 10 farklı rota. Her satır: Origin City, Origin County, Destination City, Destination County.</p><p className="mt-1 text-sm font-medium text-amber-700">Kuyruk oluşturmak ücretli çağrı başlatmaz. Her satır yalnızca “Sonraki satırı işle” ile tek tek çalışır ve her satırdan sonra operatör incelemesi için durur.</p></div>
+      <div><p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Toplu Rota</p><h1 className="text-2xl font-bold text-slate-900">CSV Kuyruğu</h1><p className="text-sm text-slate-600">En fazla 10 farklı rota. Her satır: çıkış ili, çıkış ilçesi, varış ili, varış ilçesi (virgül veya noktalı virgülle ayrılmış; Excel CSV dosyası doğrudan yüklenebilir).</p><p className="mt-1 text-sm font-medium text-amber-700">Kuyruk oluşturmak ücretli çağrı başlatmaz. Her satır yalnızca “Sonraki satırı işle” ile tek tek çalışır ve her satırdan sonra operatör incelemesi için durur.</p></div>
       <div className="flex flex-wrap items-end gap-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <label className="flex items-center gap-3 text-sm text-slate-700"><input type="checkbox" checked={useTolls} onChange={(event) => setUseTolls(event.target.checked)} className="h-5 w-5 rounded" />Ücretli yolları kullan</label>
         <label className="flex flex-col gap-1 text-sm font-medium text-slate-700">Başlangıç zamanı<input type="datetime-local" value={startTime} onChange={(event) => setStartTime(event.target.value)} className="rounded-md border border-slate-300 px-3 py-2" /></label>

@@ -21,13 +21,17 @@ export type LocationMatch = {
   lat?: number;
   lng?: number;
   matched: boolean;
+  /** False when a county was given but not found, so the city centre is used instead. */
+  countyMatched?: boolean;
 };
 
 let cachedCities: CityRecord[] | null = null;
 
+// Turkish casing: "I"/"ı" and "İ"/"i" all fold to "i", so AYDIN, Aydin and aydın (or ısparta in cities.json) match.
 const normalize = (value: string) =>
   value
-    .toLowerCase()
+    .toLocaleLowerCase("tr-TR")
+    .replace(/ı/g, "i")
     .normalize("NFD")
     .replace(/\p{Diacritic}/gu, "")
     .replace(/[^a-z0-9]/g, "");
@@ -57,7 +61,8 @@ export const findLocation = (cityInput: string, countyInput?: string): LocationM
           county: county.name,
           lat: county.latitude ? Number(county.latitude) : city.latitude ? Number(city.latitude) : undefined,
           lng: county.longitude ? Number(county.longitude) : city.longitude ? Number(city.longitude) : undefined,
-          matched: true
+          matched: true,
+          countyMatched: true
         };
       }
     }
@@ -67,7 +72,8 @@ export const findLocation = (cityInput: string, countyInput?: string): LocationM
       county: countyInput,
       lat: city.latitude ? Number(city.latitude) : undefined,
       lng: city.longitude ? Number(city.longitude) : undefined,
-      matched: true
+      matched: true,
+      ...(countyKey ? { countyMatched: false } : {})
     };
   }
 
