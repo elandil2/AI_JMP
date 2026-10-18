@@ -40,3 +40,9 @@ test("recognises Turkish headers regardless of case and diacritics", () => {
     assert.deepEqual(result.rows, [{ originCity: "İzmir", originCounty: "Menemen", destinationCity: "Ankara", destinationCounty: "Çankaya", sourceRow: 2 }], header);
   }
 });
+
+test("row numbers in errors are physical CSV lines, skipping blank lines and quoted newlines", () => {
+  const result = parseBatchCsv('Origin City,Origin County,Destination City,Destination County\n\n"Bursa\nmerkez",Nilüfer,Ankara,\n,,Ankara,');
+  assert.equal(result.rows[0]?.sourceRow, 3);
+  assert.deepEqual(result.errors, ["5. satır: çıkış ili ve varış ili zorunlu"]);
+});

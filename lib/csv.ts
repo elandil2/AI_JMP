@@ -32,17 +32,21 @@ const detectDelimiter = (text: string): string => {
   return Object.entries(counts).reduce((best, entry) => (entry[1] > best[1] ? entry : best), [",", 0] as [string, number])[0];
 };
 
-const parseRecords = (text: string, delimiter: string): { records: string[][]; errors: string[] } => {
-  const records: string[][] = [];
+type CsvRecord = { values: string[]; line: number };
+
+/** Each record keeps its physical start line, so errors point at the right row even after blank lines. */
+const parseRecords = (text: string, delimiter: string): { records: CsvRecord[]; errors: string[] } => {
+  const records: CsvRecord[] = [];
   const errors: string[] = [];
   let record: string[] = [];
   let field = "";
   let quoted = false;
-  let row = 1;
+  let line = 1;
+  let recordLine = 1;
 
   const pushRecord = () => {
     record.push(field);
-    if (record.some((value) => value.trim())) records.push(record);
+    if (record.some((value) => value.trim())) records.push({ values: record, line: recordLine });
     record = [];
     field = "";
   };
@@ -56,24 +60,26 @@ const parseRecords = (text: string, delimiter: string): { records: string[][]; e
       } else if (char === '"') {
         quoted = false;
       } else {
+        if (char === "\n") line += 1;
         field += char;
       }
       continue;
     }
     if (char === '"') {
-      if (field.length > 0) errors.push(`${row}. satır: tırnak işareti alanın ortasında kullanılmış`);
+      if (field.length > 0) errors.push(`${line}. satır: tırnak işareti alanın ortasında kullanılmış`);
       quoted = true;
     } else if (char === delimiter) {
       record.push(field);
       field = "";
     } else if (char === "\n") {
       pushRecord();
-      row += 1;
+      line += 1;
+      recordLine = line;
     } else if (char !== "\r") {
       field += char;
     }
   }
-  if (quoted) errors.push(`${row}. satır: kapanmamış tırnak işareti`);
+  if (quoted) errors.push(`${recordLine}. satır: kapanmamış tırnak işareti`);
   if (field.length > 0 || record.length > 0) pushRecord();
   return { records, errors };
 };
@@ -85,7 +91,7 @@ export const parseBatchCsv = (text: string): CsvParseResult => {
   const { records, errors } = parseRecords(text, detectDelimiter(text));
   if (errors.length || records.length === 0) return { rows: [], errors: errors.length ? errors : ["CSV boş"] };
 
-  const first = records[0];
+  const first = records[0].values;
   const originCityIndex = headerIndex(first, ORIGIN_CITY_HEADERS);
   const destinationCityIndex = headerIndex(first, DESTINATION_CITY_HEADERS);
   const hasHeader = originCityIndex >= 0 && destinationCityIndex >= 0;
@@ -95,8 +101,8 @@ export const parseBatchCsv = (text: string): CsvParseResult => {
   const rows: BatchCsvRow[] = [];
 
   for (let index = start; index < records.length; index += 1) {
-    const values = records[index].map((value) => value.trim());
-    const sourceRow = index + 1;
+    const values = records[index].values.map((value) => value.trim());
+    const sourceRow = records[index].line;
     if (!hasHeader && values.length > 4) {
       errors.push(`${sourceRow}. satır: en fazla dört sütun olmalı (çıkış ili, çıkış ilçesi, varış ili, varış ilçesi)`);
       continue;
