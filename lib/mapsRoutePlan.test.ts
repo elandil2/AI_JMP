@@ -32,21 +32,24 @@ test('Maps parser preserves numeric step measures, coordinates, and road labels'
   const oldFetch = globalThis.fetch;
   const oldKey = process.env.GOOGLE_MAPS_API_KEY;
   process.env.GOOGLE_MAPS_API_KEY = 'test-only';
-  globalThis.fetch = async () => new Response(JSON.stringify({ status: 'OK', routes: [{
-    summary: 'D300 / E96', overview_polyline: { points: 'encoded-route' }, legs: [{
-      distance: { value: 200_000, text: '200 km' }, duration: { value: 7_200, text: '2 hours' },
-      start_address: 'Menemen', end_address: 'Afyon',
-      start_location: { lat: 38.6, lng: 27.0667 }, end_location: { lat: 38.75, lng: 30.55 },
+  globalThis.fetch = async () => new Response(JSON.stringify({ routes: [{
+    description: 'D300 / E96', polyline: { encodedPolyline: 'encoded-route' }, legs: [{
+      distanceMeters: 200_000, duration: '7200s', staticDuration: '7200s',
+      startLocation: { latLng: { latitude: 38.6, longitude: 27.0667 } }, endLocation: { latLng: { latitude: 38.75, longitude: 30.55 } },
       steps: [
         {
-          html_instructions: 'Continue onto <b>D300</b>/<b>E96</b>',
-          distance: { value: 80_000, text: '80 km' }, duration: { value: 2_800, text: '47 mins' },
-          start_location: { lat: 38.6, lng: 27.0667 }, end_location: { lat: 38.67, lng: 28.2 }, maneuver: 'straight'
+          navigationInstruction: { maneuver: 'STRAIGHT', instructions: 'D300/E96 üzerinden devam edin' },
+          distanceMeters: 80_000, staticDuration: '2800s', localizedValues: { distance: { text: '80 km' }, staticDuration: { text: '47 dk' } },
+          startLocation: { latLng: { latitude: 38.6, longitude: 27.0667 } }, endLocation: { latLng: { latitude: 38.67, longitude: 28.2 } }
         },
         {
-          html_instructions: 'Turn <b>right</b> toward <b>Afyonkarahisar</b>',
-          distance: { value: 120_000, text: '120 km' }, duration: { value: 4_400, text: '1 hour 13 mins' },
-          start_location: { lat: 38.67, lng: 28.2 }, end_location: { lat: 38.75, lng: 30.55 }
+          navigationInstruction: { maneuver: 'TURN_RIGHT', instructions: 'Afyonkarahisar yönüne sağa dönün' },
+          distanceMeters: 120_000, staticDuration: '4400s',
+          startLocation: { latLng: { latitude: 38.67, longitude: 28.2 } }, endLocation: { latLng: { latitude: 38.75, longitude: 30.55 } }
+        },
+        {
+          navigationInstruction: { instructions: 'Ankara Çevre Yolu yoluna devam edin' },
+          distanceMeters: 1_000, staticDuration: '60s'
         }
       ]
     }]
@@ -62,8 +65,14 @@ test('Maps parser preserves numeric step measures, coordinates, and road labels'
     assert.deepEqual(result.steps[0].startLocation, { lat: 38.6, lng: 27.0667 });
     assert.deepEqual(result.steps[0].endLocation, { lat: 38.67, lng: 28.2 });
     assert.equal(result.steps[0].roadLabel, 'D300 / E96');
+    assert.equal(result.steps[0].distance, '80 km');
+    assert.equal(result.steps[0].maneuver, 'straight');
     assert.equal(result.steps[1].roadLabel, undefined);
-    assert.equal(result.steps[1].instruction, 'Turn right toward Afyonkarahisar');
+    assert.equal(result.steps[1].instruction, 'Afyonkarahisar yönüne sağa dönün');
+    assert.equal(result.steps[1].maneuver, 'turn-right');
+    assert.equal(result.steps[2].roadLabel, 'Ankara Çevre Yolu');
+    assert.equal(result.summary, 'D300 / E96');
+    assert.equal(result.polyline, 'encoded-route');
   } finally {
     globalThis.fetch = oldFetch;
     if (oldKey === undefined) delete process.env.GOOGLE_MAPS_API_KEY;

@@ -17,7 +17,7 @@ ZIP seçilmiş kaynak dosyalarının sürümlü kopyasıdır. `.git`, gerçek or
 
 1. Node.js ve npm kurulu ortam. Kesin paket sürümleri kilit dosyasındadır; ekip Node sürümünü ayrıca standartlaştırmalıdır.
 2. Uygulamanın beklediği tabloları, yetkileri ve Auth yapılandırmasını içeren uyumlu Supabase ortamı.
-3. Gemini ve mevcut kodun çağırdığı Google Maps Directions hizmeti için geçerli erişim ve faturalama ayarları.
+3. Gemini ve mevcut kodun çağırdığı Google Maps Routes API ile Weather API için geçerli erişim ve faturalama ayarları.
 4. Doğru alan adı, Vercel ortam değişkenleri ve Auth yönlendirme adresleri.
 
 `supabase/migrations/20260914153537_benchmark_telemetry.sql` **artımlı** migration'dır. Önceden var olan `batches`, `batch_items` ve `reports` tablolarını bekler; boş veritabanını tek başına kurmaz. Temel tablolar, Auth ilişkileri, fonksiyonlar ve politikalar için kaynak ortamdan doğrulanmış şema/devir çalışması gerekir. Canlıya bu dosyayı körlemesine tekrar uygulamayın.
@@ -34,10 +34,10 @@ Yerel veya kurum içi dağıtımda uygulama sunucusu ayrı barındırılabilir; 
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Mevcut istemcinin anon anahtarı; tarayıcıya açıktır. RLS ve tablo yetkilerinin yerini tutmaz. |
 | `SUPABASE_SERVICE_ROLE_KEY` | Sunucu tarafı ayrıcalıklı erişim. Gizli tutulur; `NEXT_PUBLIC_` öneki verilmez. |
 | `GEMINI_API_KEY` | Sunucu tarafı Gemini anahtarı. Kod eski `API_KEY` adını da yedek olarak kabul eder; yeni kurulumda standart adı kullanın. |
-| `GOOGLE_MAPS_API_KEY` | Sunucu tarafı Directions çağrısı. Eksikliğinde güvenilir Maps rotası elde edildiği varsayılamaz; tahmin yoluna düşülebilir. |
+| `GOOGLE_MAPS_API_KEY` | Sunucu tarafı Routes API (`computeRoutes`) ve Weather API çağrıları. Eksikliğinde güvenilir Maps rotası elde edildiği varsayılamaz; tahmin yoluna düşülebilir. |
 | `NEXT_PUBLIC_APP_URL` | Paylaşım ve CSV bağlantılarının taban adresi. Yerelde `http://localhost:3000`, üretimde kendi HTTPS adresiniz. |
 
-Kodun Maps isteği `https://maps.googleapis.com/maps/api/directions/json` adresinedir. Ayrı bir Routes API yetkisinin bu çağrıya otomatik erişim verdiğini varsaymayın; hesabın mevcut hizmet erişimini kontrol edin. Bu devirde sağlayıcı/API değişimi yapılmadı.
+Kodun rota isteği `POST https://routes.googleapis.com/directions/v2:computeRoutes` adresinedir. Directions API (Legacy) yeni Google Cloud projelerinde etkinleştirilemediği için (`LegacyApiNotActivatedMapError`) Routes API'ye geçildi. Projede **Routes API** etkin olmalı ve anahtarın API kısıtlamaları Routes API'ye izin vermelidir. Kalkış saatli (trafik verili) istekler Compute Routes Pro, diğerleri Essentials SKU'su ile ücretlenir.
 
 Vercel değerlerini gerekli Production/Preview/Development kapsamına girin. Preview ortamını istemeden canlı kullanıcı verisine bağlamayın. Anahtarlar için kontrollü gizli bilgi kanalı kullanın; README veya ekran görüntüsüne yapıştırmayın.
 
