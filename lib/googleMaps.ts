@@ -1,5 +1,5 @@
 /**
- * Google Maps Directions API Service
+ * Google Maps Routes API Service
  * Direct API calls for accurate route data
  */
 
@@ -20,6 +20,7 @@ export interface DirectionsResult {
     text: string;
     value: number;
   };
+  /** Routes API returns no formatted address; these hold the requested "lat,lng". */
   startAddress: string;
   endAddress: string;
   startLocation?: RouteCoordinate;
@@ -70,27 +71,56 @@ function parseRouteCoordinate(value: unknown): RouteCoordinate | undefined {
   return { lat, lng };
 }
 
-function decodeInstructionText(value: string): string {
-  return value.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/&amp;/gi, '&')
-    .replace(/&quot;/gi, '"').replace(/&#39;|&apos;/gi, "'").replace(/&lt;/gi, '<').replace(/&gt;/gi, '>')
-    .replace(/\s+/g, ' ').trim();
+const ROUTES_URL = 'https://routes.googleapis.com/directions/v2:computeRoutes';
+const ROUTES_FIELD_MASK = [
+  'routes.description', 'routes.warnings', 'routes.polyline.encodedPolyline',
+  'routes.legs.distanceMeters', 'routes.legs.duration', 'routes.legs.staticDuration',
+  'routes.legs.startLocation', 'routes.legs.endLocation',
+  'routes.legs.steps.distanceMeters', 'routes.legs.steps.staticDuration',
+  'routes.legs.steps.startLocation', 'routes.legs.steps.endLocation',
+  'routes.legs.steps.navigationInstruction', 'routes.legs.steps.localizedValues'
+].join(',');
+const TRAVEL_MODES = { driving: 'DRIVE', walking: 'WALK', bicycling: 'BICYCLE', transit: 'TRANSIT' } as const;
+
+function toWaypoint(coords: string) {
+  const [latitude, longitude] = coords.split(',').map(part => Number(part.trim()));
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) throw new Error(`Invalid coordinate: ${coords}`);
+  return { location: { latLng: { latitude, longitude } } };
 }
 
-function parseRoadLabel(htmlInstruction: string): string | undefined {
-  const boldLabels = [...htmlInstruction.matchAll(/<b\b[^>]*>(.*?)<\/b>/gi)]
-    .map(match => decodeInstructionText(match[1].replace(/<[^>]*>/g, ' ')))
-    .filter(label => label && !/^(north(?:east|west)?|south(?:east|west)?|east|west|kuzey|güney|doğu|batı|right|left|straight|sağ|sol|düz|yönünde|toward|towards)$/i.test(label));
-  if (!boldLabels.length) return undefined;
+/** Routes API durations are strings such as "16879s". */
+function parseDurationSeconds(value: unknown): number | undefined {
+  if (typeof value !== 'string') return undefined;
+  const match = /^(\d+(?:\.\d+)?)s$/.exec(value);
+  return match ? Number(match[1]) : undefined;
+}
 
-  const routeCodes = boldLabels.filter(label => /\b(?:D|E|O|K|A)\s*[-/]?\s*\d{1,4}\b/i.test(label));
-  const roadNames = boldLabels.filter(label => /(?:yolu|otoyolu|çevre yolu|cad\.?|caddesi|bulvarı|bulvar|sokağı|köprüsü|tüneli|highway|motorway|road|street)\b/i.test(label));
+function parseRoutesLocation(value: unknown): RouteCoordinate | undefined {
+  const latLng = (value as { latLng?: { latitude?: unknown; longitude?: unknown } } | undefined)?.latLng;
+  return parseRouteCoordinate({ lat: latLng?.latitude, lng: latLng?.longitude });
+}
+
+/** Routes API instructions are plain text, so road codes and names are matched directly. */
+function parsePlainRoadLabel(instruction: string): string | undefined {
+  const routeCodes = [...instruction.matchAll(/\b[DEOKA]-?\d{1,4}\b/g)].map(match => match[0]);
+  const roadNames = routeCodes.length ? [] : [...instruction.matchAll(/(?:[A-ZÇĞİÖŞÜ][\p{L}\d.'-]*\s+)+(?:Otoyolu|Çevre Yolu|Yolu|Caddesi|Cad\.|Bulvarı|Köprüsü|Tüneli)/gu)]
+    .map(match => match[0].trim());
   const selected = routeCodes.length ? routeCodes : roadNames;
   if (!selected.length) return undefined;
   return [...new Set(selected)].join(' / ').slice(0, 120);
 }
 
+function routesErrorMessage(data: unknown, httpStatus: number): { code: string; message: string } {
+  const error = (data as { error?: { status?: unknown; message?: unknown } } | null)?.error;
+  return {
+    code: typeof error?.status === 'string' ? error.status : `HTTP_${httpStatus}`,
+    message: typeof error?.message === 'string' ? error.message : 'invalid response'
+  };
+}
+
 /**
- * Calls Google Maps Directions API with coordinates
+ * Calls Google Maps Routes API (computeRoutes) with coordinates.
+ * Directions API (Legacy) cannot be enabled on new Google Cloud projects.
  */
 export async function getDirections(
   originCoords: string,     // "41.0082,28.9784"
@@ -109,95 +139,101 @@ export async function getDirections(
     return null;
   }
 
-  const baseUrl = "https://maps.googleapis.com/maps/api/directions/json";
-
-  // Build query params
-  const params = new URLSearchParams({
-    origin: originCoords,
-    destination: destCoords,
-    key: apiKey,
-    mode: options.mode || "driving",
-    language: "tr",  // Turkish language for instructions
-    units: "metric",
-    // Truck-specific: avoid ferries typically
-    avoid: options.useTolls === false ? "tolls|ferries" : "ferries",
-  });
-
-  // Add waypoint if specified
-  if (options.stopCoords) {
-    params.set("waypoints", options.stopCoords);
-  }
-
-  // Add departure time for traffic estimation
-  // Add departure time for traffic estimation
-  if (options.departureTime) {
-    const now = Date.now();
-    // Google Maps API requires departure_time to be in the future (or very close to now)
-    // If user provided a time in the past (e.g. latency), clamp it to now.
-    const depTime = options.departureTime.getTime() < now ? now : options.departureTime.getTime();
-    params.set("departure_time", Math.floor(depTime / 1000).toString());
-  }
+  const travelMode = TRAVEL_MODES[options.mode || 'driving'];
+  // Traffic-aware routing (billed as Compute Routes Pro) only when a departure time is requested.
+  const trafficAware = Boolean(options.departureTime) && travelMode === 'DRIVE';
 
   const startedAt = Date.now();
   let result: DirectionsResult | null = null;
   let failure: string | undefined;
   let failureCode: string | undefined;
   try {
-    const response = await fetch(`${baseUrl}?${params.toString()}`, { signal: AbortSignal.timeout(20000) });
-    const data: unknown = await response.json();
+    const body: Record<string, unknown> = {
+      origin: toWaypoint(originCoords),
+      destination: toWaypoint(destCoords),
+      travelMode,
+      languageCode: 'tr',  // Turkish language for instructions
+      units: 'METRIC',
+      // Truck-specific: avoid ferries typically
+      routeModifiers: { avoidFerries: true, ...(options.useTolls === false ? { avoidTolls: true } : {}) },
+      ...(options.stopCoords ? { intermediates: [toWaypoint(options.stopCoords)] } : {}),
+      ...(travelMode === 'DRIVE' ? { routingPreference: trafficAware ? 'TRAFFIC_AWARE' : 'TRAFFIC_UNAWARE' } : {})
+    };
+    // Routes API rejects past departure times; omitting it means "now".
+    if (trafficAware && options.departureTime!.getTime() > Date.now() + 60_000) {
+      body.departureTime = options.departureTime!.toISOString();
+    }
 
-    if (!response.ok || typeof data !== 'object' || data === null || (data as { status?: unknown }).status !== "OK") {
-      const status = typeof data === 'object' && data !== null && typeof (data as { status?: unknown }).status === 'string'
-        ? (data as { status: string }).status
-        : 'invalid response';
-      console.error("Google Maps API error:", status);
-      failure = `Directions request failed: ${status}`;
-      failureCode = status;
+    const response = await fetch(ROUTES_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Goog-Api-Key': apiKey, 'X-Goog-FieldMask': ROUTES_FIELD_MASK },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(20000)
+    });
+    const data: unknown = await response.json();
+    const route = (data as { routes?: any[] } | null)?.routes?.[0];
+
+    if (!response.ok || !route) {
+      const { code, message } = response.ok
+        ? { code: 'ZERO_RESULTS', message: 'Routes API returned no route.' }
+        : routesErrorMessage(data, response.status);
+      console.error("Google Maps Routes API error:", code, message);
+      failure = `Routes request failed: ${code} - ${message}`;
+      failureCode = code;
     } else {
-      const route = (data as { routes?: any[] }).routes?.[0];
-      if (!route?.legs?.length) throw new Error('Directions response did not contain a route leg.');
-      const legs = route.legs;
-      if (legs.some((leg: any) => !Number.isFinite(leg.distance?.value) || leg.distance.value <= 0 || !Number.isFinite(leg.duration?.value) || leg.duration.value <= 0)) throw new Error('Directions response has invalid distance or duration.');
-      const distance = legs.reduce((sum: number, leg: any) => sum + leg.distance.value, 0);
-      const duration = legs.reduce((sum: number, leg: any) => sum + leg.duration.value, 0);
-      const trafficDuration = legs.every((leg: any) => Number.isFinite(leg.duration_in_traffic?.value) && leg.duration_in_traffic.value > 0)
-        ? legs.reduce((sum: number, leg: any) => sum + leg.duration_in_traffic.value, 0) : undefined;
+      if (!route.legs?.length) throw new Error('Routes response did not contain a route leg.');
+      const legs = route.legs.map((leg: any) => ({
+        ...leg,
+        distance: leg.distanceMeters,
+        staticSeconds: parseDurationSeconds(leg.staticDuration) ?? parseDurationSeconds(leg.duration),
+        trafficSeconds: parseDurationSeconds(leg.duration)
+      }));
+      if (legs.some((leg: any) => !Number.isFinite(leg.distance) || leg.distance <= 0 || !Number.isFinite(leg.staticSeconds) || leg.staticSeconds <= 0)) throw new Error('Routes response has invalid distance or duration.');
+      const distance = legs.reduce((sum: number, leg: any) => sum + leg.distance, 0);
+      const duration = legs.reduce((sum: number, leg: any) => sum + leg.staticSeconds, 0);
+      const trafficDuration = trafficAware && legs.every((leg: any) => Number.isFinite(leg.trafficSeconds) && leg.trafficSeconds > 0)
+        ? legs.reduce((sum: number, leg: any) => sum + leg.trafficSeconds, 0) : undefined;
       const durationText = (seconds: number) => { const minutes = Math.round(seconds / 60); return `${Math.floor(minutes / 60)} sa ${minutes % 60} dk`; };
       const steps: DirectionStep[] = legs.flatMap((leg: any) => (leg.steps ?? []).map((step: any) => {
-        const htmlInstruction = typeof step.html_instructions === 'string' ? step.html_instructions : '';
-        const distanceMeters = Number.isFinite(step.distance?.value) && step.distance.value >= 0 ? step.distance.value : undefined;
-        const durationSeconds = Number.isFinite(step.duration?.value) && step.duration.value >= 0 ? step.duration.value : undefined;
+        const instruction = typeof step.navigationInstruction?.instructions === 'string'
+          ? step.navigationInstruction.instructions.replace(/\s+/g, ' ').trim() : '';
+        const distanceMeters = Number.isFinite(step.distanceMeters) && step.distanceMeters >= 0 ? step.distanceMeters : undefined;
+        const durationSeconds = parseDurationSeconds(step.staticDuration);
+        const startLocation = parseRoutesLocation(step.startLocation);
+        const endLocation = parseRoutesLocation(step.endLocation);
+        const roadLabel = parsePlainRoadLabel(instruction);
+        const maneuver = step.navigationInstruction?.maneuver;
         return {
-          instruction: decodeInstructionText(htmlInstruction), distance: step.distance?.text || '', duration: step.duration?.text || '',
+          instruction, distance: step.localizedValues?.distance?.text || '', duration: step.localizedValues?.staticDuration?.text || '',
           ...(distanceMeters === undefined ? {} : { distanceMeters }),
           ...(durationSeconds === undefined ? {} : { durationSeconds }),
-          ...(parseRouteCoordinate(step.start_location) ? { startLocation: parseRouteCoordinate(step.start_location) } : {}),
-          ...(parseRouteCoordinate(step.end_location) ? { endLocation: parseRouteCoordinate(step.end_location) } : {}),
-          ...(parseRoadLabel(htmlInstruction) ? { roadLabel: parseRoadLabel(htmlInstruction) } : {}),
-          ...(typeof step.maneuver === 'string' ? { maneuver: step.maneuver } : {})
+          ...(startLocation ? { startLocation } : {}),
+          ...(endLocation ? { endLocation } : {}),
+          ...(roadLabel ? { roadLabel } : {}),
+          ...(typeof maneuver === 'string' ? { maneuver: maneuver.toLowerCase().replace(/_/g, '-') } : {})
         };
       }));
-      const startLocation = parseRouteCoordinate(legs[0].start_location);
-      const endLocation = parseRouteCoordinate(legs.at(-1).end_location);
+      const startLocation = parseRoutesLocation(legs[0].startLocation);
+      const endLocation = parseRoutesLocation(legs.at(-1).endLocation);
       result = {
         distance: { text: `${Math.round(distance / 1000)} km`, value: distance }, duration: { text: durationText(duration), value: duration },
         durationInTraffic: trafficDuration === undefined ? undefined : { text: durationText(trafficDuration), value: trafficDuration },
-        startAddress: legs[0].start_address, endAddress: legs.at(-1).end_address,
+        startAddress: originCoords, endAddress: destCoords,
         ...(startLocation ? { startLocation } : {}), ...(endLocation ? { endLocation } : {}),
-        summary: route.summary || "", steps, polyline: route.overview_polyline?.points || "", warnings: route.warnings || []
+        summary: route.description || "", steps, polyline: route.polyline?.encodedPolyline || "", warnings: route.warnings || []
       };
-      console.log(`Google Maps API: Distance = ${result.distance.text}, Duration = ${result.duration.text}`);
+      console.log(`Google Maps Routes API: Distance = ${result.distance.text}, Duration = ${result.duration.text}`);
     }
 
   } catch (error) {
-    console.error("Failed to call Google Maps Directions API:", error);
-    failure = error instanceof Error ? error.message : 'Directions request failed.';
+    console.error("Failed to call Google Maps Routes API:", error);
+    failure = error instanceof Error ? error.message : 'Routes request failed.';
     failureCode = 'maps_request_error';
   }
   // Deliberately outside the request try/catch: telemetry persistence failure is never hidden or retried.
   await emitUsage(options.onUsage, {
     provider: 'maps', stage: 'directions', model: 'directions', outcome: result ? 'success' : 'error', durationMs: Date.now() - startedAt,
-    estimatedCost: estimatedDirectionsCost(Boolean(options.departureTime)), mapsCostUsd: options.departureTime ? 0.01 : 0.005, routeSource: result ? 'maps' : 'unavailable', errorCode: failureCode, error: failure
+    estimatedCost: estimatedDirectionsCost(trafficAware), mapsCostUsd: trafficAware ? 0.01 : 0.005, routeSource: result ? 'maps' : 'unavailable', errorCode: failureCode, error: failure
   });
   return result;
 }

@@ -29,10 +29,9 @@ const metered = (text: string): FakeResponse => ({
 });
 
 const mapsPayload = {
-  status: 'OK',
-  routes: [{ summary: 'D100', overview_polyline: { points: 'abc' }, warnings: [], legs: [{
-    distance: { text: '450 km', value: 450000 }, duration: { text: '6 saat', value: 21600 }, start_address: 'Origin', end_address: 'Destination',
-    steps: [{ html_instructions: 'Düz git', distance: { text: '10 km' }, duration: { text: '10 dk' } }]
+  routes: [{ description: 'D100', polyline: { encodedPolyline: 'abc' }, warnings: [], legs: [{
+    distanceMeters: 450000, duration: '21600s', staticDuration: '21600s',
+    steps: [{ navigationInstruction: { instructions: 'Düz git' }, localizedValues: { distance: { text: '10 km' }, staticDuration: { text: '10 dk' } } }]
   }] }]
 };
 const canonicalPolyline = '_p~iF~ps|U_ulLnnqC_mqNvxq`@';
@@ -128,7 +127,7 @@ test('Maps geometry keeps only corridor candidates and never trusts Gemini schem
     const calls: RequestParams[] = [];
     const restoreFetch = installMapsFetch({
       ...mapsPayload,
-      routes: [{ ...mapsPayload.routes[0], overview_polyline: { points: canonicalPolyline } }]
+      routes: [{ ...mapsPayload.routes[0], polyline: { encodedPolyline: canonicalPolyline } }]
     });
     process.env.GOOGLE_MAPS_API_KEY = 'test-maps-key';
     const onCorridorCritical = JSON.parse(critical);
@@ -162,7 +161,7 @@ test('off-corridor Gemini critical points are omitted from the returned route wa
     });
     const restoreFetch = installMapsFetch({
       ...mapsPayload,
-      routes: [{ ...mapsPayload.routes[0], overview_polyline: { points: canonicalPolyline } }]
+      routes: [{ ...mapsPayload.routes[0], polyline: { encodedPolyline: canonicalPolyline } }]
     });
     process.env.GOOGLE_MAPS_API_KEY = 'test-maps-key';
     installFakeGemini([metered(JSON.stringify(offRouteCritical)), metered(weather)], calls);
@@ -183,7 +182,7 @@ test('an on-corridor incident without a direct source is retained as a corridor 
     const calls: RequestParams[] = [];
     const restoreFetch = installMapsFetch({
       ...mapsPayload,
-      routes: [{ ...mapsPayload.routes[0], overview_polyline: { points: canonicalPolyline } }]
+      routes: [{ ...mapsPayload.routes[0], polyline: { encodedPolyline: canonicalPolyline } }]
     });
     process.env.GOOGLE_MAPS_API_KEY = 'test-maps-key';
     const unsourced = JSON.parse(critical);
@@ -256,10 +255,10 @@ test('Maps steps create route and weather checkpoints even when no road incident
       ...mapsPayload,
       routes: [{ ...mapsPayload.routes[0], legs: [{ ...mapsPayload.routes[0].legs[0],
         steps: Array.from({ length: 6 }, (_, index) => ({
-          html_instructions: `D${300 - index * 10} yönünde ilerle`,
-          distance: { text: '75 km', value: 75000 }, duration: { text: '1 sa', value: 3600 },
-          start_location: { lat: 38 + index * 0.1, lng: 27 + index },
-          end_location: { lat: 38 + (index + 1) * 0.1, lng: 28 + index }
+          navigationInstruction: { instructions: `D${300 - index * 10} yönünde ilerle` },
+          distanceMeters: 75000, staticDuration: '3600s',
+          startLocation: { latLng: { latitude: 38 + index * 0.1, longitude: 27 + index } },
+          endLocation: { latLng: { latitude: 38 + (index + 1) * 0.1, longitude: 28 + index } }
         }))
       }] }]
     };
@@ -286,7 +285,7 @@ test('Maps steps create route and weather checkpoints even when no road incident
 test('AI road claims on the corridor are retained even without search grounding metadata', async () => {
   await withApiKey(async () => {
     const calls: RequestParams[] = [];
-    const restoreFetch = installMapsFetch({ ...mapsPayload, routes: [{ ...mapsPayload.routes[0], overview_polyline: { points: canonicalPolyline } }] });
+    const restoreFetch = installMapsFetch({ ...mapsPayload, routes: [{ ...mapsPayload.routes[0], polyline: { encodedPolyline: canonicalPolyline } }] });
     process.env.GOOGLE_MAPS_API_KEY = 'test-maps-key';
     const claim = JSON.parse(critical);
     claim.criticalPoints[0].coordinate = '38.5,-120.2';
@@ -325,7 +324,7 @@ test('TomTom roadwork candidates enter the report and count-based route density'
       ? new Response(JSON.stringify({ incidents: [{ type: 'Feature', geometry: { type: 'Point', coordinates: [-120.2, 38.5] }, properties: {
         id: 'work-1', iconCategory: 9, events: [{ description: 'D260 road works' }], timeValidity: 'present', roadNumbers: ['D260']
       } }] }))
-      : new Response(JSON.stringify({ ...mapsPayload, routes: [{ ...mapsPayload.routes[0], overview_polyline: { points: canonicalPolyline } }] }));
+      : new Response(JSON.stringify({ ...mapsPayload, routes: [{ ...mapsPayload.routes[0], polyline: { encodedPolyline: canonicalPolyline } }] }));
     const calls: RequestParams[] = [];
     installFakeGemini([metered(weather)], calls);
     try {

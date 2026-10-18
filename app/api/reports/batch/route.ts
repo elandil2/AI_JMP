@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth";
+import { batchLocationErrors } from "@/lib/batchLocations";
 import { parseBatchCsv } from "@/lib/csv";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 
@@ -39,11 +40,13 @@ export async function POST(req: Request) {
   if ("error" in payload) return NextResponse.json({ error: payload.error }, { status: 400 });
 
   const parsed = parseBatchCsv(payload.csv);
-  if (parsed.errors.length) return NextResponse.json({ error: "CSV validation failed", errors: parsed.errors }, { status: 400 });
-  if (!parsed.rows.length) return NextResponse.json({ error: "No valid rows found" }, { status: 400 });
-  if (parsed.rows.length > MAX_ROWS) return NextResponse.json({ error: `A batch can contain at most ${MAX_ROWS} rows` }, { status: 400 });
+  if (parsed.errors.length) return NextResponse.json({ error: "CSV doğrulanamadı", errors: parsed.errors }, { status: 400 });
+  if (!parsed.rows.length) return NextResponse.json({ error: "Geçerli satır bulunamadı" }, { status: 400 });
+  if (parsed.rows.length > MAX_ROWS) return NextResponse.json({ error: `Bir kuyrukta en fazla ${MAX_ROWS} satır olabilir` }, { status: 400 });
+  const unknownLocations = batchLocationErrors(parsed.rows);
+  if (unknownLocations.length) return NextResponse.json({ error: "CSV'de bulunamayan il/ilçe var", errors: unknownLocations }, { status: 400 });
   const duplicates = parsed.rows.filter((row, index, rows) => rows.findIndex((candidate) => rowKey(candidate) === rowKey(row)) !== index);
-  if (duplicates.length) return NextResponse.json({ error: "Each batch row must be distinct", rows: duplicates.map((row) => row.sourceRow) }, { status: 400 });
+  if (duplicates.length) return NextResponse.json({ error: `Aynı rota kuyrukta birden fazla kez var (satır: ${duplicates.map((row) => row.sourceRow).join(", ")})`, rows: duplicates.map((row) => row.sourceRow) }, { status: 400 });
 
   const profile = await getProfile(auth.userId, auth.email);
   if ("error" in profile) return NextResponse.json({ error: profile.error }, { status: 500 });

@@ -103,13 +103,13 @@ Raporlar ekranında satırların kutucuklarını seçin ve **CSV İndir (Export)
 ## 10. Birden fazla rota: CSV kuyruğu
 
 1. **CSV Yükle** bölümünü açın.
-2. UTF-8 kodlamalı, virgülle ayrılmış `.csv` dosyası seçin veya CSV satırlarını metin alanına yapıştırın. Excel'in noktalı virgülle kaydetmediğinden emin olun.
-3. En fazla **10 farklı rota** girin. Aynı rotayı aynı kuyrukta tekrarlamayın. İl alanları zorunlu, ilçe alanları isteğe bağlıdır.
+2. `.csv` dosyası seçin veya CSV satırlarını metin alanına yapıştırın. Virgül, noktalı virgül (Türkçe Excel) ve sekme ayırıcı ile UTF-8 veya Windows-1254 (Excel "CSV") kodlaması kabul edilir. Başlık satırı isteğe bağlıdır; İngilizce (`Origin City` …) veya Türkçe (`Çıkış İli`, `Çıkış İlçesi`, `Varış İli`, `Varış İlçesi`) olabilir.
+3. En fazla **10 farklı rota** girin. Aynı rotayı aynı kuyrukta tekrarlamayın. İl alanları zorunlu, ilçe alanları isteğe bağlıdır. İl/ilçe adları büyük-küçük harf ve Türkçe karakter farkından bağımsız eşleşir (`AYDIN`, `Aydin`, `aydın`). Bulunamayan il veya ilçe kuyruk oluşturulurken satır numarasıyla bildirilir; ücretli çağrı yapılmaz.
 4. Ücretli yol ve kalkış zamanı seçeneklerini kontrol edin. **Gemini 2.5 Flash** ile devam edin.
 5. **CSV kuyruğunu oluştur** düğmesine basın. Kayıt oluşturulur; ücretli model/Maps üretimi bu aşamada başlamaz.
 6. **Sonraki satırı işle** ile yalnız bir satırı çalıştırın. Sonucu, hata/maliyet bilgisini inceleyip sonraki satıra geçin.
 
-Örnek dosya: [ornek-rotalar.csv](ornek-rotalar.csv).
+Örnek dosyalar: [ornek-rotalar.csv](ornek-rotalar.csv), 5 satırlık şablon: [toplu-rapor-sablonu.csv](toplu-rapor-sablonu.csv).
 
 ```csv
 Origin City,Origin County,Destination City,Destination County

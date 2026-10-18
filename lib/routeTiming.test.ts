@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { calculateBreaks, calculateTruckDuration, getDirections, type DirectionsResult } from './googleMaps';
 import { mapsTiming, parseHours, reconcileSchematic } from './routeTiming';
+import type { GenerationEvent } from '../types';
 
 test('arrival does not receive a break or overnight rest after the trip has ended', () => {
   assert.equal(calculateBreaks(4.5).totalBreakMinutes, 0);
@@ -81,22 +82,48 @@ test('Maps sums all legs for an intermediate stop and preserves traffic duration
   const oldFetch = globalThis.fetch;
   const oldKey = process.env.GOOGLE_MAPS_API_KEY;
   process.env.GOOGLE_MAPS_API_KEY = 'fake';
-  let requested = '';
-  globalThis.fetch = async input => {
-    requested = String(input);
-    return new Response(JSON.stringify({status:'OK',routes:[{summary:'A-B-C',legs:[
-      {distance:{value:100000},duration:{value:3600},duration_in_traffic:{value:4000},start_address:'A',end_address:'B',steps:[]},
-      {distance:{value:200000},duration:{value:7200},duration_in_traffic:{value:8000},start_address:'B',end_address:'C',steps:[]}
+  let requestedUrl = '';
+  let requestInit: RequestInit | undefined;
+  globalThis.fetch = async (input, init) => {
+    requestedUrl = String(input);
+    requestInit = init;
+    return new Response(JSON.stringify({routes:[{description:'A-B-C',legs:[
+      {distanceMeters:100000,staticDuration:'3600s',duration:'4000s',steps:[]},
+      {distanceMeters:200000,staticDuration:'7200s',duration:'8000s',steps:[]}
     ]}]}));
   };
   try {
-    const result = await getDirections('40,29','39,32',{stopCoords:'40,30',departureTime:new Date(Date.now()+60000)});
+    const departureTime = new Date(Date.now()+3600000);
+    const result = await getDirections('40,29','39,32',{stopCoords:'40,30',departureTime});
     assert.equal(result?.distance.value,300000);
     assert.equal(result?.duration.value,10800);
     assert.equal(result?.durationInTraffic?.value,12000);
-    assert.equal(result?.endAddress,'C');
-    assert.ok(new URL(requested).searchParams.has('departure_time'));
-    assert.equal(new URL(requested).searchParams.get('waypoints'),'40,30');
+    assert.equal(result?.endAddress,'39,32');
+    assert.equal(requestedUrl,'https://routes.googleapis.com/directions/v2:computeRoutes');
+    assert.equal(requestInit?.method,'POST');
+    assert.equal((requestInit?.headers as Record<string,string>)['X-Goog-Api-Key'],'fake');
+    const body = JSON.parse(String(requestInit?.body));
+    assert.equal(body.routingPreference,'TRAFFIC_AWARE');
+    assert.equal(body.departureTime,departureTime.toISOString());
+    assert.deepEqual(body.intermediates,[{location:{latLng:{latitude:40,longitude:30}}}]);
+    assert.deepEqual(body.routeModifiers,{avoidFerries:true});
+  } finally {
+    globalThis.fetch=oldFetch;
+    if(oldKey===undefined) delete process.env.GOOGLE_MAPS_API_KEY; else process.env.GOOGLE_MAPS_API_KEY=oldKey;
+  }
+});
+
+test('Maps reports the Routes API error message when the request is denied', async () => {
+  const oldFetch = globalThis.fetch;
+  const oldKey = process.env.GOOGLE_MAPS_API_KEY;
+  process.env.GOOGLE_MAPS_API_KEY = 'fake';
+  const events: GenerationEvent[] = [];
+  globalThis.fetch = async () => new Response(JSON.stringify({error:{code:403,status:'PERMISSION_DENIED',message:'Routes API has not been used in project 123.'}}),{status:403});
+  try {
+    const result = await getDirections('40,29','39,32',{useTolls:false,onUsage:event=>{events.push(event);}});
+    assert.equal(result,null);
+    assert.equal(events[0].errorCode,'PERMISSION_DENIED');
+    assert.match(events[0].error ?? '',/has not been used/);
   } finally {
     globalThis.fetch=oldFetch;
     if(oldKey===undefined) delete process.env.GOOGLE_MAPS_API_KEY; else process.env.GOOGLE_MAPS_API_KEY=oldKey;
