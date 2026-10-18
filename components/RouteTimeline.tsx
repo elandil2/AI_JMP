@@ -68,7 +68,7 @@ export const RouteTimeline: React.FC<RouteTimelineProps> = ({ events }) => {
         <button
           type="button"
           onClick={speakInstructions}
-          className="flex min-h-11 items-center justify-center gap-2 bg-emerald-700 hover:bg-emerald-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700 text-white px-4 py-2 rounded-full text-sm font-medium transition-colors shadow-md"
+          className="print:hidden flex min-h-11 items-center justify-center gap-2 bg-emerald-700 hover:bg-emerald-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700 text-white px-4 py-2 rounded-full text-sm font-medium transition-colors shadow-md"
         >
           <span className="text-lg" aria-hidden="true">🔊</span> Akışı Seslendir
         </button>
@@ -85,7 +85,7 @@ export const RouteTimeline: React.FC<RouteTimelineProps> = ({ events }) => {
             </p>
           )}
           {events.map((event, index) => (
-            <div key={event.id || index} className="relative flex gap-4">
+            <div key={event.id || index} className="print-keep relative flex gap-4">
               {/* Icon Bubble */}
               <div className={`
                 flex-shrink-0 w-12 h-12 rounded-full flex items-center justify-center shadow-md z-10 border-4 border-white

@@ -94,3 +94,28 @@ test('legacy critical schematic nodes are never described as Google Maps passage
   assert.equal(timeline.length, schematic.nodes.length);
   assert.ok(timeline.every(item => !item.title.includes('Model kritik iddiası')));
 });
+
+test('road warnings follow their route position, not model hours that ignore rests', () => {
+  const schematic: RouteSchematic = {
+    totalDuration: '43 sa 49 dk', totalDistance: '1219 km',
+    nodes: [
+      { name: 'Menemen', type: 'origin', distanceFromStart: '0 km', timeFromStart: '0 sa 0 dk' },
+      { name: 'Sarayönü · 11 sa Günlük Dinlenme', type: 'break', distanceFromStart: '547 km', timeFromStart: '20 sa 45 dk' },
+      { name: 'Ulaş · D260', type: 'stop', distanceFromStart: '1.032 km', timeFromStart: '29 sa 42 dk' },
+      { name: 'Arguvan', type: 'destination', distanceFromStart: '1219 km', timeFromStart: '43 sa 49 dk' }
+    ]
+  };
+  const warning = (id: string, location: string, timeOffsetHours: number, progress: number) => ({
+    id, coordinate: '39,37', timeOffsetHours, routeVerification: { status: 'corridor_candidate', progress },
+    weather: { location, temp: '-', condition: '-', icon: 'unknown' },
+    traffic: { status: 'unknown', description: '' },
+    incident: { type: 'hazard', description: 'Dikkat.' }
+  }) as CriticalPoint;
+  const titles = buildRouteTimeline(schematic, [
+    warning('kula', 'Kula', 1.5, 0.08),
+    warning('aptalbogan', 'Aptalboğan', 14, 0.93)
+  ]).map(event => event.title);
+  assert.deepEqual(titles, [
+    'Menemen', 'Yol uyarısı adayı · Kula', 'Sarayönü · 11 sa Günlük Dinlenme', 'Ulaş · D260', 'Yol uyarısı adayı · Aptalboğan', 'Arguvan'
+  ]);
+});

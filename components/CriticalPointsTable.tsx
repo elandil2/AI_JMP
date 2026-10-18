@@ -54,7 +54,7 @@ export const CriticalPointsTable = ({ points, weather, totalDistance }: Critical
   }
 
   return <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
-    <ol className="space-y-3 p-3 md:hidden">
+    <ol className="space-y-3 p-3 md:hidden print:!block">
       {rows.map(row => row.kind === 'weather' ? <li key={row.id} className="rounded-lg border border-slate-200 p-4">
         <h4 className="break-words font-semibold text-slate-900">{row.weather.location}</h4>
         {row.weather.passageTime && <p className="mt-1 text-xs text-slate-600">Planlanan geçiş: <time dateTime={row.weather.passageTime}>{new Date(row.weather.passageTime).toLocaleString('tr-TR', { timeZone: 'Europe/Istanbul', dateStyle: 'short', timeStyle: 'short' })}</time></p>}
@@ -73,7 +73,7 @@ export const CriticalPointsTable = ({ points, weather, totalDistance }: Critical
         </a>}
       </li>)}
     </ol>
-    <div className="hidden overflow-x-auto md:block">
+    <div className="hidden overflow-x-auto md:block print:!hidden">
     <table className="min-w-[760px] w-full text-left text-sm text-slate-700">
       <thead className="bg-slate-50 text-xs font-bold uppercase text-slate-700"><tr>
         <th scope="col" className="px-4 py-3">Bölge / geçiş</th>

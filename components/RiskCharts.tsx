@@ -27,11 +27,15 @@ export const RiskCharts = ({ intensityData, typeData, trafficCoverage }: RiskCha
     );
   }
 
-  const maximum = Math.max(1, ...intensityData.map(segment => segment.value));
+  // Gemini's regional scores (0-100) carry no event count or length; only aggregated segments are densities.
+  const aiScores = intensityData.length > 0 && intensityData.every(segment => segment.eventCount === undefined && segment.distanceKm === undefined);
+  const maximum = aiScores ? 100 : Math.max(1, ...intensityData.map(segment => segment.value));
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6" aria-label="Kaynaklı yol uyarısı yoğunluğu">
-      <h3 className="text-lg font-bold text-slate-900">Kaynaklı Yol Uyarısı Yoğunluğu</h3>
-      <p className="mt-1 text-sm leading-6 text-slate-600">Değerler her etapta 100 km başına düşen olay adayı sayısıdır; kaza olasılığı veya sürüş güvenliği puanı değildir. Aynı yol ve yön ayrıca doğrulanmalıdır.</p>
+    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6" aria-label={aiScores ? 'Bölgesel risk puanı' : 'Kaynaklı yol uyarısı yoğunluğu'}>
+      <h3 className="text-lg font-bold text-slate-900">{aiScores ? 'Bölgesel Risk Puanı (AI tahmini)' : 'Kaynaklı Yol Uyarısı Yoğunluğu'}</h3>
+      <p className="mt-1 text-sm leading-6 text-slate-600">{aiScores
+        ? 'Değerler yapay zekânın bölge için verdiği 0–100 arası tır sürüş risk puanıdır; olay sayısı veya kaza olasılığı değildir ve kaynakla doğrulanmamıştır.'
+        : 'Değerler her etapta 100 km başına düşen olay adayı sayısıdır; kaza olasılığı veya sürüş güvenliği puanı değildir. Aynı yol ve yön ayrıca doğrulanmalıdır.'}</p>
       <TrafficCoverage data={trafficCoverage} />
       <div className="mt-5 grid gap-7 lg:grid-cols-[minmax(0,2fr)_minmax(220px,1fr)]">
         <div>
@@ -41,7 +45,9 @@ export const RiskCharts = ({ intensityData, typeData, trafficCoverage }: RiskCha
               <li key={`${segment.name}-${index}`} className="min-w-0">
                 <div className="mb-1 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 text-xs">
                   <span className="min-w-0 break-words font-medium text-slate-700">{segment.name}</span>
-                  <span className="shrink-0 tabular-nums text-slate-600">{segment.eventCount ?? 0} aday · {segment.distanceKm ?? '-'} km · {segment.value.toLocaleString('tr-TR')} / 100 km</span>
+                  <span className="shrink-0 tabular-nums text-slate-600">{aiScores
+                    ? `${segment.value.toLocaleString('tr-TR')} / 100`
+                    : `${segment.eventCount ?? 0} aday · ${segment.distanceKm ?? '-'} km · ${segment.value.toLocaleString('tr-TR')} / 100 km`}</span>
                 </div>
                 <div className="h-3 overflow-hidden rounded-full bg-slate-100" aria-hidden="true">
                   <div className="h-full rounded-full bg-amber-600" style={{ width: `${Math.max(0, Math.min(100, segment.value / maximum * 100))}%` }} />

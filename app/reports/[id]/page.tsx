@@ -151,7 +151,7 @@ export default function OperatorReportPage() {
         {report && hasAnalysis && (
           <div className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <div className="lg:col-span-2 bg-slate-100 border border-slate-200 rounded-2xl overflow-hidden min-h-[340px]">
+              <div className="print-keep lg:col-span-2 bg-slate-100 border border-slate-200 rounded-2xl overflow-hidden min-h-[340px]">
                 <p className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-950">
                   Güncel Google haritası rotayı yeniden hesaplar; kayıtlı raporun mesafe ve süre hesabından farklı bir yol gösterebilir.
                 </p>
@@ -167,7 +167,7 @@ export default function OperatorReportPage() {
                   ></iframe>
                 )}
               </div>
-              <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm flex flex-col gap-3">
+              <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm flex flex-col gap-3 print:hidden">
                 <h4 className="font-semibold text-slate-900">Paylaşım</h4>
                 <button
                   onClick={() => window.open(navigationUrl, "_blank")}

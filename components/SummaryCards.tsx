@@ -28,9 +28,9 @@ const WeatherIcon = ({ icon, className }: { icon: string, className?: string }) 
 export const SummaryCards: React.FC<SummaryCardsProps> = ({ data, weather }) => {
   const isLegacyEstimate = !data.mapsDuration && !data.drivingDuration && !data.breakDuration && !data.generatedAt;
   return (
-    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8 print:grid-cols-2">
       {/* Origin Weather */}
-      <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between group hover:border-blue-200 transition-colors">
+      <div className="print-keep bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between group hover:border-blue-200 transition-colors">
         <div className="flex items-start justify-between">
           <div>
             <span className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
@@ -50,7 +50,7 @@ export const SummaryCards: React.FC<SummaryCardsProps> = ({ data, weather }) => 
       </div>
 
       {/* Route Summary */}
-      <div className="md:col-span-2 bg-gradient-to-r from-slate-900 to-slate-800 p-5 rounded-2xl shadow-lg text-white flex flex-col justify-between relative overflow-hidden print:bg-white print:text-slate-900 print:border-2 print:border-slate-800">
+      <div className="print-keep md:col-span-2 print:order-first bg-gradient-to-r from-slate-900 to-slate-800 p-5 rounded-2xl shadow-lg text-white flex flex-col justify-between relative overflow-hidden print:bg-none print:bg-white print:text-slate-900 print:border-2 print:border-slate-800 print:shadow-none">
         <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-5 rounded-full -mr-20 -mt-20 print:hidden"></div>
 
         <div className="z-10 flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -102,7 +102,7 @@ export const SummaryCards: React.FC<SummaryCardsProps> = ({ data, weather }) => 
       </div>
 
       {/* Destination Weather */}
-      <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between group hover:border-purple-200 transition-colors">
+      <div className="print-keep bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between group hover:border-purple-200 transition-colors">
         <div className="flex items-start justify-between">
           <div>
             <span className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
