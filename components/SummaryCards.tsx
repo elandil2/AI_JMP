@@ -50,7 +50,7 @@ export const SummaryCards: React.FC<SummaryCardsProps> = ({ data, weather }) => 
       </div>
 
       {/* Route Summary */}
-      <div className="print-keep md:col-span-2 print:order-first bg-gradient-to-r from-slate-900 to-slate-800 p-5 rounded-2xl shadow-lg text-white flex flex-col justify-between relative overflow-hidden print:bg-none print:bg-white print:text-slate-900 print:border-2 print:border-slate-800 print:shadow-none">
+      <div className="print-keep md:col-span-2 print:col-span-2 print:order-first bg-gradient-to-r from-slate-900 to-slate-800 p-5 rounded-2xl shadow-lg text-white flex flex-col justify-between relative overflow-hidden print:bg-none print:bg-white print:text-slate-900 print:border-2 print:border-slate-800 print:shadow-none">
         <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-5 rounded-full -mr-20 -mt-20 print:hidden"></div>
 
         <div className="z-10 flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
