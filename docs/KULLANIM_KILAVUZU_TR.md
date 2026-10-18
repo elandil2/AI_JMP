@@ -109,7 +109,7 @@ Raporlar ekranında satırların kutucuklarını seçin ve **CSV İndir (Export)
 5. **CSV kuyruğunu oluştur** düğmesine basın. Kayıt oluşturulur; ücretli model/Maps üretimi bu aşamada başlamaz.
 6. **Sonraki satırı işle** ile yalnız bir satırı çalıştırın. Sonucu, hata/maliyet bilgisini inceleyip sonraki satıra geçin.
 
-Örnek dosya: [ornek-rotalar.csv](ornek-rotalar.csv).
+Örnek dosyalar: [ornek-rotalar.csv](ornek-rotalar.csv), 5 satırlık şablon: [toplu-rapor-sablonu.csv](toplu-rapor-sablonu.csv).
 
 ```csv
 Origin City,Origin County,Destination City,Destination County
