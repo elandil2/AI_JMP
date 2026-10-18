@@ -1,7 +1,15 @@
 import type { CriticalPoint, RouteAnalysis, RouteSchematic, TimelineEvent } from '../types';
 import { parseHours } from './routeTiming';
 
-type OrderedEvent = { event: TimelineEvent; hours: number; order: number };
+type OrderedEvent = { event: TimelineEvent; hours: number; km?: number; order: number };
+
+/** "1.032 km" / "205 km" -> 1032 / 205. */
+const parseKm = (value?: string): number | undefined => {
+  const match = /([\d.,]+)\s*km/i.exec(value ?? '');
+  if (!match) return undefined;
+  const km = Number(match[1].replace(/\.(?=\d{3}\b)/g, '').replace(',', '.'));
+  return Number.isFinite(km) ? km : undefined;
+};
 
 const isNightPassage = (departureTime: string | undefined, elapsedHours: number): boolean => {
   const departure = Date.parse(departureTime ?? '');
@@ -18,7 +26,9 @@ export function buildRouteTimeline(
   departureTime?: string
 ): TimelineEvent[] {
   const totalHours = parseHours(schematic.totalDuration) ?? 0;
-  const ordered: OrderedEvent[] = schematic.nodes.filter(node => node.type !== 'critical').map((node, index) => {
+  const stageNodes = schematic.nodes.filter(node => node.type !== 'critical');
+  const totalKm = parseKm(stageNodes.at(-1)?.distanceFromStart);
+  const ordered: OrderedEvent[] = stageNodes.map((node, index) => {
     const hours = parseHours(node.timeFromStart) ?? (schematic.nodes.length > 1 ? index / (schematic.nodes.length - 1) * totalHours : 0);
     const stage = node.type === 'origin' ? 'start' : node.type === 'destination' ? 'end' : node.type === 'break' ? 'break' : 'stop';
     const night = stage === 'stop' && isNightPassage(departureTime, hours);
@@ -29,7 +39,8 @@ export function buildRouteTimeline(
         : stage === 'break'
           ? `${node.distanceFromStart} civarında mola/dinlenme planı. Tesis veya park uygunluğu ayrıca seçilmelidir.`
           : `Google Maps güzergâh geçişi · ${node.distanceFromStart} · başlangıçtan ${node.timeFromStart}.${night ? ' Gece geçişi planlanıyor; görüş ve dinlenme durumunu kontrol edin.' : ''}`;
-    return { event: { id: `maps-stage-${index}`, title: node.name, description, type: stage }, hours, order: index * 2 };
+    const km = stage === 'start' ? 0 : parseKm(node.distanceFromStart);
+    return { event: { id: `maps-stage-${index}`, title: node.name, description, type: stage }, hours, km, order: index * 2 };
   });
   points.forEach((point, index) => {
     const progressHours = typeof point.timeOffsetHours === 'number' && Number.isFinite(point.timeOffsetHours)
@@ -43,10 +54,14 @@ export function buildRouteTimeline(
         type: 'warning'
       },
       hours,
+      km: totalKm !== undefined && typeof point.routeVerification?.progress === 'number' ? point.routeVerification.progress * totalKm : undefined,
       order: index * 2 + 1
     });
   });
-  return ordered.sort((a, b) => a.hours - b.hours || a.order - b.order).map(item => item.event);
+  // Order by position on the route when every entry has one: model-estimated hours ignore rests,
+  // which put late-route warnings before an earlier daily rest.
+  const byKm = ordered.every(item => item.km !== undefined);
+  return ordered.sort((a, b) => (byKm ? a.km! - b.km! : a.hours - b.hours) || a.order - b.order).map(item => item.event);
 }
 
 /** Upgrade endpoint-only saved reports for display, without rewriting their stored analysis. */

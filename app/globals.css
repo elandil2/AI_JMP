@@ -49,6 +49,23 @@ body {
   .page-break {
     page-break-before: always;
   }
+  @page {
+    size: A4;
+    margin: 12mm;
+  }
+  /* Keep cards, list rows and timeline entries whole instead of splitting them across pages. */
+  li,
+  tr,
+  .print-keep {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  h2,
+  h3,
+  h4 {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
 }
 
 .print-only {

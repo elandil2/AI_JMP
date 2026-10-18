@@ -277,7 +277,8 @@ export const analyzeRoute = async (originName: string, destinationName: string, 
     const completedRestHours = (routeData.routePlan?.breakTargets ?? [])
       .filter(rest => rest.driveThresholdHours < drivenHours)
       .reduce((sum, rest) => sum + rest.breakMinutes / 60, 0);
-    const timeOffsetHours = point.timeOffsetHours ?? (drivenHours + completedRestHours);
+    // Gemini's own offset assumes car speed and no rests; prefer the planned time at the point's route position.
+    const timeOffsetHours = routeVerification.progress !== undefined ? drivenHours + completedRestHours : point.timeOffsetHours ?? (drivenHours + completedRestHours);
 
     return {
       ...point,

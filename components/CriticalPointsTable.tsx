@@ -54,26 +54,26 @@ export const CriticalPointsTable = ({ points, weather, totalDistance }: Critical
   }
 
   return <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
-    <ol className="space-y-3 p-3 md:hidden">
-      {rows.map(row => row.kind === 'weather' ? <li key={row.id} className="rounded-lg border border-slate-200 p-4">
+    <ol className="space-y-3 p-3 md:hidden print:!grid print:grid-cols-2 print:gap-2 print:space-y-0 print:p-2">
+      {rows.map(row => row.kind === 'weather' ? <li key={row.id} className="rounded-lg border border-slate-200 p-4 print:p-2.5">
         <h4 className="break-words font-semibold text-slate-900">{row.weather.location}</h4>
         {row.weather.passageTime && <p className="mt-1 text-xs text-slate-600">Planlanan geçiş: <time dateTime={row.weather.passageTime}>{new Date(row.weather.passageTime).toLocaleString('tr-TR', { timeZone: 'Europe/Istanbul', dateStyle: 'short', timeStyle: 'short' })}</time></p>}
         <p className="mt-2 text-sm text-slate-800"><span aria-hidden="true">{weatherSymbol(row.weather.icon)} </span><strong>{row.weather.temp}</strong> · {row.weather.condition}</p>
         <p className="mt-1 text-xs text-amber-800">{weatherSourceLabel(row.weather)}</p>
-        {validLink(row.weather.sourceUrl) && <a className="inline-flex min-h-11 items-center text-xs text-blue-700 underline" href={validLink(row.weather.sourceUrl)} target="_blank" rel="noopener noreferrer">Hava kaynağını aç</a>}
+        {validLink(row.weather.sourceUrl) && <a className="inline-flex min-h-11 items-center text-xs text-blue-700 underline print:min-h-0" href={validLink(row.weather.sourceUrl)} target="_blank" rel="noopener noreferrer">Hava kaynağını aç</a>}
         <p className="mt-2 text-xs text-slate-600">Yol uyarısı: kaynaklı olay eşleşmedi.</p>
-      </li> : <li key={row.id} className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+      </li> : <li key={row.id} className="rounded-lg border border-amber-200 bg-amber-50 p-4 print:p-2.5">
         <h4 className="break-words font-semibold text-slate-900">{row.point.weather.location} · yol uyarısı adayı</h4>
         <p className="mt-1 font-mono text-xs text-slate-600">{row.point.coordinate}</p>
         <p className="mt-2 text-sm font-medium text-slate-800">{row.point.incident.description}</p>
         <p className="mt-1 text-xs text-slate-600">{row.point.traffic.description}</p>
         <p className="mt-1 text-xs text-amber-900">Rota koridoruna yakın; aynı yol ve yön kesinleşmedi.</p>
-        {validLink(row.point.incident.source) && <a className="inline-flex min-h-11 items-center text-xs font-semibold text-blue-700 underline" href={validLink(row.point.incident.source)} target="_blank" rel="noopener noreferrer">
+        {validLink(row.point.incident.source) && <a className="inline-flex min-h-11 items-center text-xs font-semibold text-blue-700 underline print:min-h-0" href={validLink(row.point.incident.source)} target="_blank" rel="noopener noreferrer">
           {row.point.provenance?.provider === 'tomtom' || row.point.provenance?.provider === 'mapbox' ? 'Sağlayıcı yöntemini aç' : 'Olay kaynağını aç'}
         </a>}
       </li>)}
     </ol>
-    <div className="hidden overflow-x-auto md:block">
+    <div className="hidden overflow-x-auto md:block print:!hidden">
     <table className="min-w-[760px] w-full text-left text-sm text-slate-700">
       <thead className="bg-slate-50 text-xs font-bold uppercase text-slate-700"><tr>
         <th scope="col" className="px-4 py-3">Bölge / geçiş</th>

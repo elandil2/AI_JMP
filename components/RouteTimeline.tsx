@@ -68,7 +68,7 @@ export const RouteTimeline: React.FC<RouteTimelineProps> = ({ events }) => {
         <button
           type="button"
           onClick={speakInstructions}
-          className="flex min-h-11 items-center justify-center gap-2 bg-emerald-700 hover:bg-emerald-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700 text-white px-4 py-2 rounded-full text-sm font-medium transition-colors shadow-md"
+          className="print:hidden flex min-h-11 items-center justify-center gap-2 bg-emerald-700 hover:bg-emerald-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700 text-white px-4 py-2 rounded-full text-sm font-medium transition-colors shadow-md"
         >
           <span className="text-lg" aria-hidden="true">🔊</span> Akışı Seslendir
         </button>
@@ -76,26 +76,26 @@ export const RouteTimeline: React.FC<RouteTimelineProps> = ({ events }) => {
 
       <div className="relative pl-4">
         {/* Vertical Line */}
-        <div className="absolute left-[27px] top-4 bottom-4 w-0.5 bg-slate-200 border-l border-dashed border-slate-300"></div>
+        <div className="absolute left-[27px] print:left-[31px] top-4 bottom-4 w-0.5 bg-slate-200 border-l border-dashed border-slate-300"></div>
 
-        <div className="space-y-8">
+        <div className="space-y-8 print:space-y-3">
           {events.length === 0 && (
             <p className="text-slate-500 italic text-sm">
               Bu rota için özel bir kritik nokta veya olay belirtilmemiştir.
             </p>
           )}
           {events.map((event, index) => (
-            <div key={event.id || index} className="relative flex gap-4">
+            <div key={event.id || index} className="print-keep relative flex gap-4">
               {/* Icon Bubble */}
               <div className={`
-                flex-shrink-0 w-12 h-12 rounded-full flex items-center justify-center shadow-md z-10 border-4 border-white
+                flex-shrink-0 w-12 h-12 print:w-8 print:h-8 print:border-2 print:shadow-none rounded-full flex items-center justify-center shadow-md z-10 border-4 border-white
                 ${getColorClass(event.type)}
               `}>
                 {getIcon(event.icon, event.type)}
               </div>
 
               {/* Content */}
-              <div className="min-w-0 flex-1 pt-1">
+              <div className="min-w-0 flex-1 pt-1 print:pt-0">
                 <h4 className={`break-words text-base font-bold ${event.type === 'danger' ? 'text-rose-600' : 'text-slate-800'}`}>
                   {event.title}
                 </h4>

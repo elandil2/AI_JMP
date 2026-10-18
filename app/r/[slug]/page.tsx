@@ -117,7 +117,7 @@ export default function PublicReportPage() {
           {report && hasAnalysis && (
             <button
               onClick={() => window.open(navigationUrl, "_blank")}
-              className="min-h-11 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 px-6 rounded-xl shadow-sm transition-colors"
+              className="min-h-11 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 px-6 rounded-xl shadow-sm transition-colors print:hidden"
             >
               <Navigation className="w-4 h-4" /> Navigasyonu Aç
             </button>
@@ -130,7 +130,7 @@ export default function PublicReportPage() {
 
         {report && hasAnalysis && (
           <div className="space-y-6">
-            <div className="bg-slate-100 border border-slate-200 rounded-2xl overflow-hidden min-h-[360px]">
+            <div className="print-keep bg-slate-100 border border-slate-200 rounded-2xl overflow-hidden min-h-[360px] print:min-h-0">
               <p className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-950">
                 Güncel Google haritası rotayı yeniden hesaplar; kayıtlı raporun mesafe ve süre hesabından farklı bir yol gösterebilir.
                 İlçe merkezi koordinatları gerçek tesis girişini temsil etmeyebilir.
@@ -141,6 +141,7 @@ export default function PublicReportPage() {
                   width="100%"
                   height="100%"
                   style={{ border: 0, minHeight: "360px" }}
+                  className="print:!h-[230px] print:!min-h-[230px]"
                   src={mapEmbedUrl}
                   allowFullScreen
                   loading="lazy"
@@ -172,7 +173,7 @@ export default function PublicReportPage() {
 
                 {/* Route Schematic - Moved to bottom */}
                 {report.analysis.routeSchematic && report.analysis.routeSchematic.nodes && report.analysis.routeSchematic.nodes.length > 0 && (
-                  <section>
+                  <section className="print:hidden">
                     <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
                       <span className="text-2xl">📍</span> Rota Şeması
                     </h3>
@@ -183,7 +184,7 @@ export default function PublicReportPage() {
                 <ReportSources sources={report.analysis.groundingMetadata} routeSchematic={report.analysis.routeSchematic} />
 
                 {/* Bottom Navigation Button */}
-                <div className="pt-8 pb-12 flex justify-center">
+                <div className="pt-8 pb-12 flex justify-center print:hidden">
                   <button
                     onClick={() => window.open(navigationUrl, "_blank")}
                     className="min-h-11 flex items-center justify-center gap-3 bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-10 rounded-2xl shadow-lg transition-all hover:scale-105 active:scale-95"
