@@ -56,7 +56,7 @@ Yeni Maps destekli raporlarda farklı süreler ayrı gösterilir:
 | Google Maps · otomobil | Maps tarafından döndürülen otomobil yolculuk süresi. |
 | Tahmini kamyon sürüşü | Mesafe için 60 km/sa ortalama kabul edilir; Maps süresi daha uzunsa o süre kullanılır. |
 | Mola süresi | Uygulamanın planlama varsayımlarından hesaplanan mola/dinlenme toplamı. |
-| Tır planlama tahmini (mola dahil) | Tahmini kamyon sürüşü ile mola/dinlenmenin toplamı. |
+| Toplam yolculuk (mola dahil) | Tahmini kamyon sürüşü ile mola/dinlenmenin toplamı. Kartta ayrıca mola sayısı, gece dinlenmesi sayısı ve planlanan varış (aynı gün / ertesi gün) görünür. Eski raporlarda bu başlık "Tır planlama tahmini (mola dahil)" olarak kalır. |
 
 Örnek canlı testin kayıtlı çıktısı: **1.484 km**, Maps otomobil **16 sa 40 dk**, tahmini kamyon sürüşü **24 sa 44 dk**, mola/dinlenme **24 sa 15 dk**, toplam **48 sa 59 dk**. Bunlar o raporun değerleridir; yeni rapor için sabit sonuç değildir.
 

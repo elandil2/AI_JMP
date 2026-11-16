@@ -82,12 +82,15 @@ export default function OperatorReportPage() {
 
   const statusKind = report ? getReportStatusKind(report) : null;
   const hasAnalysis = statusKind === "ready" && Boolean(report?.analysis);
+  const via = report?.analysis?.via;
+  const viaEmbed = via ? `${via.lat},${via.lng}+to:` : "";
+  const viaNav = via ? `&waypoints=${encodeURIComponent(`${via.lat},${via.lng}`)}` : "";
   const mapEmbedUrl =
     report && hasAnalysis
       ? `https://maps.google.com/maps?saddr=${report.origin_lat && report.origin_lng
         ? `${report.origin_lat},${report.origin_lng}`
         : encodeURIComponent(originLabel)
-      }&daddr=${report.destination_lat && report.destination_lng
+      }&daddr=${viaEmbed}${report.destination_lat && report.destination_lng
         ? `${report.destination_lat},${report.destination_lng}`
         : encodeURIComponent(destLabel)
       }&dirflg=d&t=m&z=6&output=embed`
@@ -104,7 +107,7 @@ export default function OperatorReportPage() {
     }&destination=${report.destination_lat && report.destination_lng
       ? `${report.destination_lat},${report.destination_lng}`
       : encodeURIComponent(destLabel)
-    }&travelmode=driving`
+    }${viaNav}&travelmode=driving`
     : "";
 
   const shareWhatsapp = () => {
@@ -134,7 +137,7 @@ export default function OperatorReportPage() {
           <div>
             <p className="text-xs uppercase tracking-[0.2em] text-slate-500 font-semibold">Operatör Görünümü</p>
             <h1 className="text-2xl font-bold text-slate-900">
-              {report ? `${originLabel} → ${destLabel}` : "Rapor"}
+              {report ? `${originLabel} → ${destLabel}${via ? ` (${via.name} üzerinden)` : ""}` : "Rapor"}
             </h1>
             {report && <p className="text-sm text-slate-500">Durum: {statusKind ? reportStatusLabel(statusKind) : report.status}</p>}
           </div>

@@ -7,6 +7,15 @@ export interface SummaryStats {
   mapsDuration?: string;
   drivingDuration?: string;
   breakDuration?: string;
+  /** Number of 10 h driving days the plan relies on (EU 561/2006 allows two a week). */
+  extendedDrivingDays?: number;
+  /** Planned 45 min breaks. */
+  shortBreakCount?: number;
+  /** Planned 11 h daily rests (overnight). */
+  dailyRestCount?: number;
+  /** ISO times; set when the departure time is known. */
+  departureTime?: string;
+  arrivalTime?: string;
   durationLabel?: string;
   routeNotice?: string;
   sourceCoverage?: 'unverified' | 'verified';
@@ -82,6 +91,10 @@ export interface RouteAnalysis {
   criticalPoints?: CriticalPoint[];
   routeSchematic?: RouteSchematic;
   groundingMetadata?: GroundingChunk[];
+  /** Route-shaping waypoint ("X üzerinden"). Not a delivery stop. */
+  via?: { name: string; lat: number; lng: number };
+  /** False when the operator said the driver has no 10 h extension left this week. */
+  driverHasExtension?: boolean;
 }
 
 export interface CriticalPoint {
@@ -140,6 +153,8 @@ export interface RouteOptions {
   stopName?: string;
   stopCoords?: string;
   departureTime?: string; // ISO string
+  /** 10 h driving days the plan may use (0–2). Omit for the weekly maximum (2). */
+  maxExtendedDays?: number;
   /** Approved Gemini model identifier. Omit to use the default model. */
   model?: string;
   /** Receives one sanitized metering event for each provider attempt. */

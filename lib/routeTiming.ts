@@ -1,8 +1,5 @@
-import {
-  calculateBreaks,
-  calculateTruckDuration,
-  type DirectionsResult,
-} from './googleMaps';
+import { calculateTruckDuration, DEFAULT_TRUCK_PLANNING_SPEED_KMH, type DirectionsResult } from './googleMaps';
+import { planDrivingSchedule, type DrivingSchedule } from './drivingSchedule';
 import type { RouteSchematic, RouteSegmentNode, SummaryStats } from '../types';
 
 export const formatHours = (hours: number): string => {
@@ -11,41 +8,48 @@ export const formatHours = (hours: number): string => {
 };
 
 export interface MapsTimingOptions {
-  /** Planning assumption only. Must be between 60 and 65 km/h; omitted uses the near-arrival rule. */
+  /** Planning assumption only. Must be between 60 and 65 km/h; default 60. */
   planningSpeedKmh?: number;
-}
-
-/** Select 65 km/h only when it avoids a modeled 11-hour rest in the final 50 km. */
-export function choosePlanningSpeed(maps: DirectionsResult): number {
-  const mapsHours = (maps.durationInTraffic?.value ?? maps.duration.value) / 3600;
-  const at60 = Math.max(calculateTruckDuration(maps.distance.value, 60).hours, mapsHours);
-  const at65 = Math.max(calculateTruckDuration(maps.distance.value, 65).hours, mapsHours);
-  const savedRestMinutes = calculateBreaks(at60).totalBreakMinutes - calculateBreaks(at65).totalBreakMinutes;
-  const lastDailyThreshold = Math.floor((at60 - 0.000001) / 9) * 9;
-  const remainingKm = lastDailyThreshold > 0 ? (at60 - lastDailyThreshold) / at60 * maps.distance.value / 1000 : Infinity;
-  return savedRestMinutes >= 11 * 60 && remainingKm > 0 && remainingKm <= 50 ? 65 : 60;
+  /** 10 h driving days the plan may use (0–2). Default 2, the weekly maximum. */
+  maxExtendedDays?: number;
+  /** When given, the summary carries departure and planned arrival times. */
+  departureTime?: Date | string;
 }
 
 export function mapsTiming(
   maps: DirectionsResult,
   options: MapsTimingOptions = {}
-): { summary: SummaryStats; totalHours: number; drivingHours: number } {
-  const planningSpeedKmh = options.planningSpeedKmh ?? choosePlanningSpeed(maps);
+): { summary: SummaryStats; totalHours: number; drivingHours: number; schedule: DrivingSchedule } {
+  const planningSpeedKmh = options.planningSpeedKmh ?? DEFAULT_TRUCK_PLANNING_SPEED_KMH;
   const mapsHours = (maps.durationInTraffic?.value ?? maps.duration.value) / 3600;
   // The configured distance/speed estimate can never undercut Maps' route duration.
   const drivingHours = Math.max(calculateTruckDuration(maps.distance.value, planningSpeedKmh).hours, mapsHours);
-  const breaks = calculateBreaks(drivingHours);
-  const totalHours = drivingHours + breaks.totalBreakMinutes / 60;
+  const schedule = planDrivingSchedule(drivingHours, { maxExtendedDays: options.maxExtendedDays });
+  const totalHours = schedule.totalElapsedHours;
+  const restHours = schedule.totalRestMinutes / 60;
   const planningSpeedText = planningSpeedKmh.toLocaleString('tr-TR', { maximumFractionDigits: 1 });
+  const extensionText = schedule.withoutExtension
+    ? ` Bu plan ${schedule.extendedDays} gün için 10 saatlik uzatılmış sürüş kullanıyor (haftada en fazla 2 kez). Sürücünün bu hafta hakkı yoksa varıştan önce 11 sa dinlenme gerekir ve varış ${formatHours(schedule.withoutExtension.totalElapsedHours - totalHours)} gecikir.`
+    : '';
+  const departure = options.departureTime === undefined ? undefined : new Date(options.departureTime);
+  const departureMs = departure && Number.isFinite(departure.getTime()) ? departure.getTime() : undefined;
+  const shortBreakCount = schedule.rests.filter(rest => rest.kind === 'break').length;
+  const dailyRestCount = schedule.rests.filter(rest => rest.kind === 'daily_rest').length;
   return {
-    totalHours, drivingHours,
+    totalHours, drivingHours, schedule,
     summary: {
       totalDistance: `${Math.round(maps.distance.value / 1000)} km`, estimatedDuration: formatHours(totalHours),
-      mapsDuration: formatHours(mapsHours), drivingDuration: formatHours(drivingHours), breakDuration: formatHours(breaks.totalBreakMinutes / 60),
-      durationLabel: 'Tır planlama tahmini (mola dahil)',
-      mandatoryBreak: breaks.totalBreakMinutes > 0 ? 'Planlı mola var' : 'Bu hesapta mola yok',
-      breakNote: `${formatHours(drivingHours)} tahmini sürüş + ${formatHours(breaks.totalBreakMinutes / 60)} mola/dinlenme = ${formatHours(totalHours)}. Bu yalnızca planlama simülasyonudur: 4,5 saatlik modellenen sürüşte 45 dk ara, 9 saatlik modellenen günlük sürüşten sonra yolculuk sürüyorsa 11 saat dinlenme eklenir. Gerçek sürüş/takograf hesabı değildir; önceki sürüş ve sürücünün mevcut takograf durumu bilinmiyor.`,
-      routeNotice: `Google Maps otomobil rotasıdır; tır kısıtları doğrulanmadı. ${planningSpeedText} km/sa ortalama planlama hızı, gerçek sürüş hakkı değildir.${options.planningSpeedKmh === undefined && planningSpeedKmh === 65 ? ' 60 km/sa hesabında varışa en fazla 50 km kala çıkan günlük dinlenme, 65 km/sa varsayımıyla yeniden hesaplandı.' : ''}`,
+      mapsDuration: formatHours(mapsHours), drivingDuration: formatHours(drivingHours), breakDuration: formatHours(restHours),
+      durationLabel: dailyRestCount > 0 ? 'Toplam yolculuk (mola ve gece dinlenmesi dahil)' : 'Toplam yolculuk (mola dahil)',
+      mandatoryBreak: schedule.rests.length > 0 ? 'Planlı mola var' : 'Bu hesapta mola yok',
+      breakNote: `${formatHours(drivingHours)} tahmini sürüş + ${formatHours(restHours)} mola/dinlenme = ${formatHours(totalHours)}. Bu yalnızca planlama simülasyonudur: en geç 4,5 saatlik sürüşte 45 dk ara, günlük 9 saat sürüşten sonra yolculuk sürüyorsa 11 saat dinlenme eklenir.${extensionText} Gerçek sürüş/takograf hesabı değildir; sürücünün önceki sürüşü ve takograf durumu bilinmiyor, sürücünün tam dinlenmiş başladığı varsayılır.`,
+      routeNotice: `Google Maps otomobil rotasıdır; tır kısıtları doğrulanmadı. ${planningSpeedText} km/sa ortalama planlama hızı, gerçek sürüş hakkı değildir.`,
+      ...(schedule.extendedDays > 0 ? { extendedDrivingDays: schedule.extendedDays } : {}),
+      shortBreakCount, dailyRestCount,
+      ...(departureMs === undefined ? {} : {
+        departureTime: new Date(departureMs).toISOString(),
+        arrivalTime: new Date(departureMs + totalHours * 3_600_000).toISOString()
+      }),
       generatedAt: new Date().toISOString()
     }
   };

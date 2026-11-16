@@ -88,18 +88,17 @@ export default function PublicReportPage() {
     ? `${report.destination_lat},${report.destination_lng}`
     : encodeURIComponent(destLabel);
 
-  const waypointsEmbed = breakPoints.length > 0
-    ? breakPoints.map(bp => bp.coordinate.trim()).join("+to:") + "+to:"
-    : "";
+  // The route-shaping via point drives the corridor; older reports fall back to Gemini's rest suggestions.
+  const via = report?.analysis?.via;
+  const routeWaypoints: string[] = via ? [`${via.lat},${via.lng}`] : breakPoints.map(bp => bp.coordinate.trim());
+  const waypointsEmbed = routeWaypoints.length > 0 ? routeWaypoints.join("+to:") + "+to:" : "";
 
   const mapEmbedUrl =
     report && hasAnalysis
       ? `https://maps.google.com/maps?saddr=${originCoordsStr}&daddr=${waypointsEmbed}${destCoordsStr}&dirflg=d&t=m&z=6&output=embed`
       : null;
 
-  const waypointsNav = breakPoints.length > 0
-    ? `&waypoints=${encodeURIComponent(breakPoints.map(bp => bp.coordinate.trim()).join("|"))}`
-    : "";
+  const waypointsNav = routeWaypoints.length > 0 ? `&waypoints=${encodeURIComponent(routeWaypoints.join("|"))}` : "";
 
   const navigationUrl = hasAnalysis && report
     ? `https://www.google.com/maps/dir/?api=1&origin=${originCoordsStr}&destination=${destCoordsStr}${waypointsNav}&travelmode=driving`
@@ -111,7 +110,7 @@ export default function PublicReportPage() {
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div className="space-y-1">
             <p className="text-xs uppercase tracking-[0.2em] text-slate-500 font-semibold">Sürücü Görünümü</p>
-            <h1 className="text-2xl font-bold text-slate-900">{report ? `${originLabel} → ${destLabel}` : "Rapor"}</h1>
+            <h1 className="text-2xl font-bold text-slate-900">{report ? `${originLabel} → ${destLabel}${via ? ` (${via.name} üzerinden)` : ""}` : "Rapor"}</h1>
           </div>
 
           {report && hasAnalysis && (

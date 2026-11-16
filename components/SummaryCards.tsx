@@ -25,8 +25,25 @@ const WeatherIcon = ({ icon, className }: { icon: string, className?: string }) 
   }
 };
 
+const TZ = 'Europe/Istanbul';
+const dayKey = (date: Date) => date.toLocaleDateString('en-CA', { timeZone: TZ });
+
+/** "17.11 20:50 · ertesi gün" — calendar days are counted in Turkey time. */
+const formatArrival = (departureIso?: string, arrivalIso?: string): string | null => {
+  if (!departureIso || !arrivalIso) return null;
+  const departure = new Date(departureIso);
+  const arrival = new Date(arrivalIso);
+  if (!Number.isFinite(departure.getTime()) || !Number.isFinite(arrival.getTime())) return null;
+  const text = arrival.toLocaleString('tr-TR', { timeZone: TZ, day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).replace(',', '');
+  const days = Math.round((Date.parse(dayKey(arrival)) - Date.parse(dayKey(departure))) / 86_400_000);
+  const suffix = days <= 0 ? 'aynı gün' : days === 1 ? 'ertesi gün' : `${days} gün sonra`;
+  return `${text} · ${suffix}`;
+};
+
 export const SummaryCards: React.FC<SummaryCardsProps> = ({ data, weather }) => {
   const isLegacyEstimate = !data.mapsDuration && !data.drivingDuration && !data.breakDuration && !data.generatedAt;
+  const hasRestBreakdown = data.shortBreakCount !== undefined || data.dailyRestCount !== undefined;
+  const arrival = formatArrival(data.departureTime, data.arrivalTime);
   return (
     <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8 print:grid-cols-2">
       {/* Origin Weather */}
@@ -67,10 +84,18 @@ export const SummaryCards: React.FC<SummaryCardsProps> = ({ data, weather }) => 
         </div>
 
         {(data.mapsDuration || data.drivingDuration || data.breakDuration) && (
-          <dl className="mt-3 grid grid-cols-1 gap-1 border-t border-slate-700/50 pt-3 text-xs text-slate-200 print:border-slate-300 print:text-slate-700 sm:grid-cols-3 sm:gap-3">
+          <dl className="mt-3 grid grid-cols-1 gap-1 border-t border-slate-700/50 pt-3 text-xs text-slate-200 print:border-slate-300 print:text-slate-700 sm:grid-cols-3 sm:gap-x-3 sm:gap-y-2">
             {data.mapsDuration && <div><dt className="text-slate-400 print:text-slate-600">Google Maps · otomobil</dt><dd className="font-semibold">{data.mapsDuration}</dd></div>}
             {data.drivingDuration && <div><dt className="text-slate-400 print:text-slate-600">Tahmini kamyon sürüşü</dt><dd className="font-semibold">{data.drivingDuration}</dd></div>}
-            {data.breakDuration && <div><dt className="text-slate-400 print:text-slate-600">Mola süresi</dt><dd className="font-semibold">{data.breakDuration}</dd></div>}
+            {hasRestBreakdown ? (
+              <>
+                <div><dt className="text-slate-400 print:text-slate-600">Mola</dt><dd className="font-semibold">{data.shortBreakCount ? `${data.shortBreakCount} × 45 dk` : 'Yok'}</dd></div>
+                {!!data.dailyRestCount && <div><dt className="text-slate-400 print:text-slate-600">Gece dinlenmesi</dt><dd className="font-semibold">{data.dailyRestCount} × 11 sa</dd></div>}
+                {arrival && <div><dt className="text-slate-400 print:text-slate-600">Planlanan varış</dt><dd className="font-semibold">{arrival}</dd></div>}
+              </>
+            ) : (
+              data.breakDuration && <div><dt className="text-slate-400 print:text-slate-600">Mola süresi</dt><dd className="font-semibold">{data.breakDuration}</dd></div>
+            )}
           </dl>
         )}
 

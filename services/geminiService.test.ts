@@ -97,7 +97,8 @@ test('full Maps-backed flow forwards each allowlisted model and emits metered Se
       assert.equal(analysis.criticalPoints?.length, 0);
       assert.equal(analysis.weather.origin.icon, 'cloudy');
       assert.deepEqual(analysis.weather.waypoints, []);
-      assert.deepEqual(analysis.routeSchematic?.nodes.map(node => node.type), ['origin', 'destination']);
+      // 6 h of driving needs the 4.5 h break even when Maps returned no step detail.
+      assert.deepEqual(analysis.routeSchematic?.nodes.map(node => node.type), ['origin', 'break', 'destination']);
       assert.equal(analysis.summary.mapsDuration, '6 sa 0 dk');
       assert.equal(analysis.summary.estimatedDuration, '8 sa 15 dk');
       assert.equal(analysis.summary.breakDuration, '0 sa 45 dk');
@@ -144,7 +145,7 @@ test('Maps geometry keeps only corridor candidates and never trusts Gemini schem
       assert.equal(analysis.criticalPoints?.[0]?.routeVerification?.status, 'corridor_candidate');
       assert.equal(analysis.criticalPoints?.[0]?.incident.description, 'Dağ geçidi');
       assert.deepEqual(analysis.weather.waypoints, []);
-      assert.deepEqual(analysis.routeSchematic?.nodes.map(node => node.type), ['origin', 'destination']);
+      assert.deepEqual(analysis.routeSchematic?.nodes.map(node => node.type), ['origin', 'break', 'destination']);
       assert.equal(calls.length, 2);
     } finally { restoreFetch(); }
   });
@@ -170,8 +171,8 @@ test('off-corridor Gemini critical points are omitted from the returned route wa
       assert.deepEqual(analysis.criticalPoints, []);
       assert.deepEqual(analysis.riskIntensity, []);
       assert.deepEqual(analysis.riskTypes, []);
-      assert.deepEqual(analysis.timeline.map(event => event.title), ['Origin', 'Destination']);
-      assert.deepEqual(analysis.routeSchematic?.nodes.map(node => node.type), ['origin', 'destination']);
+      assert.deepEqual(analysis.timeline.map(event => event.type), ['start', 'break', 'end']);
+      assert.deepEqual(analysis.routeSchematic?.nodes.map(node => node.type), ['origin', 'break', 'destination']);
       assert.doesNotMatch(JSON.stringify(analysis), /Bolu|RemoteBreakPoint|Yapay mola noktası/);
     } finally { restoreFetch(); }
   });
@@ -345,5 +346,27 @@ test('missing location weather is marked unknown instead of copying another city
     assert.equal(result.weather.origin.icon,'unknown');
     assert.equal(result.weather.destination.temp,'-');
     assert.match(result.summary.routeNotice!,/AI tahminidir/);
+  });
+});
+
+test('with a Maps plan the engine owns breaks: Gemini rest text and on-corridor rest points are ignored, via is kept', async () => {
+  await withApiKey(async () => {
+    const calls: RequestParams[] = [];
+    const parkSuggestion = JSON.parse(critical);
+    parkSuggestion.criticalPoints[0].coordinate = '38.5,-120.2';
+    parkSuggestion.criticalPoints.push({ ...parkSuggestion.criticalPoints[0], id: '2', incident: { type: 'break', description: 'Tır parkında 11 saat dinlen', source: 'https://www.kgm.gov.tr/road' } });
+    const restoreFetch = installMapsFetch({ ...mapsPayload, routes: [{ ...mapsPayload.routes[0], polyline: { encodedPolyline: canonicalPolyline } }] });
+    process.env.GOOGLE_MAPS_API_KEY = 'test-maps-key';
+    installFakeGemini([metered(JSON.stringify(parkSuggestion)), metered(weather)], calls);
+    try {
+      const analysis = await analyzeRoute('Origin', 'Destination', '1,1', '2,2', { useTolls: true, stopName: 'Eskişehir', stopCoords: '39.77,30.52', maxExtendedDays: 0 });
+      assert.equal(analysis.summary.mandatoryBreak, 'Planlı mola var');
+      assert.doesNotMatch(analysis.summary.breakNote, /^45 dakika mola$/);
+      assert.match(analysis.summary.breakNote, /4,5 saatlik sürüşte 45 dk ara/);
+      assert.deepEqual(analysis.criticalPoints?.map(point => point.incident.type), ['hazard']);
+      assert.deepEqual(analysis.via, { name: 'Eskişehir', lat: 39.77, lng: 30.52 });
+      assert.equal(analysis.driverHasExtension, false);
+      assert.match(String((calls[0] as unknown as { contents: string }).contents), /Eskişehir üzerinden/);
+    } finally { restoreFetch(); }
   });
 });

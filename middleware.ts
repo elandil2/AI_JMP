@@ -2,6 +2,20 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 export async function middleware(request: NextRequest) {
+    // Local-only report preview: no login and no Supabase needed. Disabled in production builds.
+    const devPath = request.nextUrl.pathname;
+    if (process.env.NODE_ENV !== "production" && (devPath === "/dev" || devPath.startsWith("/dev/") || devPath.startsWith("/api/dev/"))) {
+        return NextResponse.next({ request });
+    }
+
+    // Local dev without Supabase keys: the auth pages cannot work, so send everything to the preview page.
+    if (process.env.NODE_ENV !== "production" && (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)) {
+        const url = request.nextUrl.clone();
+        url.pathname = "/dev/rota-onizleme";
+        url.search = "";
+        return NextResponse.redirect(url);
+    }
+
     let supabaseResponse = NextResponse.next({
         request,
     });

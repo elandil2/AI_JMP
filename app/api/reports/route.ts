@@ -24,6 +24,11 @@ type ReportPayload = {
   stopName?: string;
   stopLat?: number;
   stopLng?: number;
+  /** Route-shaping waypoint picked by il/ilçe; resolved to its centre coordinate. */
+  stopCity?: string;
+  stopCounty?: string;
+  /** False when the driver has no 10 h extension left this week. Default true. */
+  driverHasExtension?: boolean;
   useTolls?: boolean;
   departureTime?: string | null;
 };
@@ -54,6 +59,9 @@ export async function POST(req: Request) {
     stopName,
     stopLat,
     stopLng,
+    stopCity,
+    stopCounty,
+    driverHasExtension = true,
     useTolls = true,
     departureTime
   } = body;
@@ -65,6 +73,7 @@ export async function POST(req: Request) {
   for (const [coordinate, limit] of [[originLat, 90], [originLng, 180], [destinationLat, 90], [destinationLng, 180], [stopLat, 90], [stopLng, 180]] as const) {
     if (coordinate !== undefined && (typeof coordinate !== 'number' || !Number.isFinite(coordinate) || Math.abs(coordinate) > limit)) return NextResponse.json({ error: 'Geçersiz koordinat.' }, { status: 400 });
   }
+  if ((stopCity !== undefined && typeof stopCity !== 'string') || (stopCounty !== undefined && typeof stopCounty !== 'string') || typeof driverHasExtension !== 'boolean') return NextResponse.json({ error: 'Geçersiz ara durak bilgisi.' }, { status: 400 });
   if ((departureTime != null && typeof departureTime !== 'string') || (stopName !== undefined && typeof stopName !== 'string')) return NextResponse.json({ error: 'Geçersiz kalkış zamanı veya durak bilgisi.' }, { status: 400 });
   const departure = departureTime ? new Date(departureTime) : new Date();
   if (Number.isNaN(departure.getTime()) || departure.getTime() < Date.now() - 60000) return NextResponse.json({ error: 'Başlangıç zamanı geçerli ve gelecekte olmalıdır.' }, { status: 400 });
@@ -79,8 +88,11 @@ export async function POST(req: Request) {
   const resolvedOriginLng = originLng ?? originMatch.lng;
   const resolvedDestLat = destinationLat ?? destMatch.lat;
   const resolvedDestLng = destinationLng ?? destMatch.lng;
-  const resolvedStopLat = stopLat;
-  const resolvedStopLng = stopLng;
+  const viaMatch = stopLat === undefined && stopCity?.trim() ? findLocation(stopCity, stopCounty) : undefined;
+  if (viaMatch && (!Number.isFinite(viaMatch.lat) || !Number.isFinite(viaMatch.lng))) return NextResponse.json({ error: 'Ara durak konumu bulunamadı.' }, { status: 400 });
+  const resolvedStopLat = stopLat ?? viaMatch?.lat;
+  const resolvedStopLng = stopLng ?? viaMatch?.lng;
+  const viaLabel = stopName?.trim() || (stopCity?.trim() ? `${stopCity}${stopCounty ? ", " + stopCounty : ""}` : undefined);
 
   const originCoords =
     resolvedOriginLat !== undefined && resolvedOriginLng !== undefined
@@ -129,8 +141,9 @@ export async function POST(req: Request) {
     let unknownCost = false;
     const rawAnalysis: RouteAnalysis = await analyzeRoute(originLabel, destLabel, originCoords, destCoords, {
       useTolls,
-      stopName: stopName || undefined,
+      stopName: viaLabel,
       stopCoords,
+      ...(driverHasExtension ? {} : { maxExtendedDays: 0 }),
       departureTime: departure.toISOString(),
       onUsage: async event => {
         telemetryEventCount += 1;

@@ -30,3 +30,7 @@ dist-ssr
 .next
 *.tsbuildinfo
 supabase/.temp/
+
+# Local-only data: Google route captures and Total source spreadsheets (contain phone numbers)
+fixtures/
+geliştirme_yapılacak/

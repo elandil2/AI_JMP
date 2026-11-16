@@ -2,6 +2,8 @@ import type { RouteSchematic, RouteSegmentNode } from '../types';
 import type { DirectionsResult } from './googleMaps';
 import { formatHours, mapsTiming } from './routeTiming';
 import type { RouteCoordinate } from './routeGeometry';
+import { buildRouteAxis } from './routeAxis';
+import { elapsedAtDrivingHours } from './drivingSchedule';
 
 const MIN_ROUTE_COVERAGE = 0.85;
 const EPSILON_HOURS = 0.000001;
@@ -10,6 +12,8 @@ export interface MapsRoutePlanOptions {
   originName?: string;
   destinationName?: string;
   planningSpeedKmh?: number;
+  /** 10 h driving days the plan may use (0–2). Default 2. */
+  maxExtendedDays?: number;
   /** Requested interior road points. Clamped to 4–8; defaults to five. */
   interiorNodeCount?: number;
 }
@@ -27,9 +31,9 @@ export interface MapsBreakTarget {
   kind: 'break' | 'daily_rest';
   name: string;
   driveThresholdHours: number;
+  /** Route position where the driving threshold is reached (constant planning speed). */
   thresholdDistanceMeters: number;
-  /** Nearest real Maps step boundary; absent when Directions supplied no usable step geometry. */
-  snappedBoundaryDistanceMeters?: number;
+  /** Point on the Maps route line at that position; absent when Maps returned no usable geometry. */
   coordinate?: RouteCoordinate;
   breakMinutes: number;
   /** Elapsed planning time at the end of the break/rest. */
@@ -46,13 +50,6 @@ interface StepBoundary {
   distanceMeters: number;
   coordinate: RouteCoordinate;
   roadLabel: string;
-}
-
-interface BreakScheduleItem {
-  kind: MapsBreakTarget['kind'];
-  driveThresholdHours: number;
-  breakMinutes: number;
-  elapsedAtEndHours: number;
 }
 
 function isValidCoordinate(value: RouteCoordinate | undefined): value is RouteCoordinate {
@@ -83,50 +80,6 @@ function getStepBoundaries(maps: DirectionsResult): StepBoundary[] {
     const roadLabel = (step.roadLabel || fallbackName || maps.summary || 'Google Maps rota adımı').slice(0, 120);
     return [{ distanceMeters: cumulative, coordinate: step.endLocation, roadLabel }];
   });
-}
-
-function createBreakSchedule(totalDrivingHours: number): BreakScheduleItem[] {
-  const schedule: BreakScheduleItem[] = [];
-  let remainingDrive = totalDrivingHours;
-  let driven = 0;
-  let currentDailyDrive = 0;
-  let accumulatedBreakHours = 0;
-
-  while (remainingDrive > EPSILON_HOURS) {
-    const segmentDrive = Math.min(4.5, 9 - currentDailyDrive, remainingDrive);
-    remainingDrive -= segmentDrive;
-    driven += segmentDrive;
-    currentDailyDrive += segmentDrive;
-
-    // Arrival ends the plan. Never append a break/rest after the trip is done.
-    if (remainingDrive <= EPSILON_HOURS) break;
-
-    const isDailyRest = currentDailyDrive >= 9 - EPSILON_HOURS;
-    const breakMinutes = isDailyRest ? 11 * 60 : 45;
-    accumulatedBreakHours += breakMinutes / 60;
-    schedule.push({
-      kind: isDailyRest ? 'daily_rest' : 'break',
-      driveThresholdHours: driven,
-      breakMinutes,
-      elapsedAtEndHours: driven + accumulatedBreakHours
-    });
-
-    if (isDailyRest) currentDailyDrive = 0;
-  }
-  return schedule;
-}
-
-function closestBoundary(boundaries: StepBoundary[], targetDistanceMeters: number): StepBoundary | undefined {
-  let closest: StepBoundary | undefined;
-  let closestDifference = Number.POSITIVE_INFINITY;
-  for (const boundary of boundaries) {
-    const difference = Math.abs(boundary.distanceMeters - targetDistanceMeters);
-    if (difference < closestDifference) {
-      closest = boundary;
-      closestDifference = difference;
-    }
-  }
-  return closest;
 }
 
 function selectInteriorBoundaries(boundaries: StepBoundary[], totalDistanceMeters: number, requestedCount: number): StepBoundary[] {
@@ -160,29 +113,26 @@ function selectInteriorBoundaries(boundaries: StepBoundary[], totalDistanceMeter
   return distinct;
 }
 
-function elapsedHoursAtDrivingTime(drivingHoursAtNode: number, schedule: BreakScheduleItem[]): number {
-  const breaksCompleted = schedule.filter(item => item.driveThresholdHours < drivingHoursAtNode - EPSILON_HOURS)
-    .reduce((sum, item) => sum + item.breakMinutes / 60, 0);
-  return drivingHoursAtNode + breaksCompleted;
-}
-
 /**
- * Build a deterministic schematic from Google Directions step geometry.
- * Interior points are real Maps step ends, named from their road instructions,
- * with cumulative distance and planning time. If Maps omits enough step detail,
- * the function intentionally returns only the origin and destination.
+ * Build a deterministic schematic from Google route geometry.
+ * Interior points are real Maps step ends, named from their road instructions.
+ * Breaks and daily rests sit exactly where the driving threshold is reached on the
+ * route line (interpolated, never snapped to a step end — Google steps can be
+ * hundreds of kilometres long). If Maps omits step detail, the schematic keeps only
+ * the endpoints and the rests.
  */
 export function buildMapsRoutePlan(maps: DirectionsResult, options: MapsRoutePlanOptions = {}): MapsRoutePlan {
-  const timing = mapsTiming(maps, { planningSpeedKmh: options.planningSpeedKmh });
+  const timing = mapsTiming(maps, { planningSpeedKmh: options.planningSpeedKmh, maxExtendedDays: options.maxExtendedDays });
   const totalDistanceMeters = maps.distance.value;
   const drivingHours = timing.drivingHours;
+  const schedule = timing.schedule;
   const boundaries = getStepBoundaries(maps);
   const selectedBoundaries = selectInteriorBoundaries(boundaries, totalDistanceMeters, options.interiorNodeCount ?? 5);
-  const breakSchedule = createBreakSchedule(drivingHours);
+  const axis = buildRouteAxis(maps);
 
-  const breakTargets: MapsBreakTarget[] = breakSchedule.map(item => {
+  const breakTargets: MapsBreakTarget[] = schedule.rests.map(item => {
     const thresholdDistanceMeters = totalDistanceMeters * item.driveThresholdHours / drivingHours;
-    const boundary = closestBoundary(boundaries, thresholdDistanceMeters);
+    const coordinate = axis.coordinateAt(thresholdDistanceMeters);
     const thresholdLabel = formatHours(item.driveThresholdHours);
     const isDailyRest = item.kind === 'daily_rest';
     return {
@@ -192,7 +142,7 @@ export function buildMapsRoutePlan(maps: DirectionsResult, options: MapsRoutePla
         : `Planlama noktası · 45 dk ara (${thresholdLabel} modellenen sürüşten sonra)`,
       driveThresholdHours: item.driveThresholdHours,
       thresholdDistanceMeters,
-      ...(boundary ? { snappedBoundaryDistanceMeters: boundary.distanceMeters, coordinate: boundary.coordinate } : {}),
+      ...(coordinate ? { coordinate } : {}),
       breakMinutes: item.breakMinutes,
       timeFromStartHours: item.elapsedAtEndHours
     };
@@ -206,26 +156,20 @@ export function buildMapsRoutePlan(maps: DirectionsResult, options: MapsRoutePla
       name: boundary.roadLabel || `Google Maps rota noktası ${index + 1}`,
       type: 'stop',
       distanceFromStart: `${Math.round(boundary.distanceMeters / 1000)} km`,
-      timeFromStart: formatHours(elapsedHoursAtDrivingTime(drivingHoursAtNode, breakSchedule))
+      timeFromStart: formatHours(elapsedAtDrivingHours(schedule, drivingHoursAtNode))
     };
   });
 
-  const breakNodes: RouteSegmentNode[] = breakTargets.flatMap(target => {
-    if (target.snappedBoundaryDistanceMeters === undefined) return [];
-    return [{
-      name: target.name,
-      type: 'break',
-      distanceFromStart: `${Math.round(target.snappedBoundaryDistanceMeters / 1000)} km`,
-      timeFromStart: formatHours(target.timeFromStartHours)
-    }];
-  });
+  const breakNodes: RouteSegmentNode[] = breakTargets.map(target => ({
+    name: target.name,
+    type: 'break',
+    distanceFromStart: `${Math.round(target.thresholdDistanceMeters / 1000)} km`,
+    timeFromStart: formatHours(target.timeFromStartHours)
+  }));
 
   const orderedInterior = [
     ...routeNodes.map((node, index) => ({ node, distanceMeters: selectedBoundaries[index].distanceMeters, order: 0 })),
-    ...breakNodes.map(node => {
-      const target = breakTargets.find(item => item.name === node.name)!;
-      return { node, distanceMeters: target.snappedBoundaryDistanceMeters!, order: 1 };
-    })
+    ...breakNodes.map((node, index) => ({ node, distanceMeters: breakTargets[index].thresholdDistanceMeters, order: 1 }))
   ].sort((a, b) => {
     const timeDifference = timeToMinutes(a.node.timeFromStart) - timeToMinutes(b.node.timeFromStart);
     return timeDifference || a.distanceMeters - b.distanceMeters || a.order - b.order;
@@ -248,7 +192,7 @@ export function buildMapsRoutePlan(maps: DirectionsResult, options: MapsRoutePla
       roadLabel: boundary.roadLabel,
       coordinate: boundary.coordinate,
       distanceFromStartMeters: boundary.distanceMeters,
-      timeOffsetHours: elapsedHoursAtDrivingTime(drivingHoursAtNode, breakSchedule)
+      timeOffsetHours: elapsedAtDrivingHours(schedule, drivingHoursAtNode)
     };
   });
 

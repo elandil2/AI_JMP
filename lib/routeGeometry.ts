@@ -55,7 +55,7 @@ export function decodeEncodedPolyline(encoded: string): RouteCoordinate[] {
   return path.length >= 2 ? path : [];
 }
 
-const haversineKm = (a: RouteCoordinate, b: RouteCoordinate): number => {
+export const haversineKm = (a: RouteCoordinate, b: RouteCoordinate): number => {
   const radians = (degrees: number) => degrees * Math.PI / 180;
   const lat1 = radians(a.lat);
   const lat2 = radians(b.lat);

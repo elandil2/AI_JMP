@@ -34,18 +34,22 @@ test('the live Gebze example has distinct Maps and truck planning durations with
   assert.equal(parseHours('3s 30dk'), 3.5);
 });
 
-test('planning speed uses 65 only to avoid a near-arrival overnight rest and keeps Maps as a floor', () => {
+test('a near-arrival daily rest becomes a 10 h day; planning speed stays 60 and Maps stays a floor', () => {
   const route = { distance: { value: 550_000 }, duration: { value: 60 } } as DirectionsResult;
-  const adapted = mapsTiming(route);
-  assert.equal(adapted.summary.drivingDuration, '8 sa 28 dk');
-  assert.equal(adapted.summary.breakDuration, '0 sa 45 dk');
-  assert.match(adapted.summary.routeNotice ?? '', /50 km kala/);
+  const extended = mapsTiming(route);
+  assert.equal(extended.summary.drivingDuration, '9 sa 10 dk');
+  assert.equal(extended.summary.breakDuration, '1 sa 30 dk');
+  assert.equal(extended.summary.estimatedDuration, '10 sa 40 dk');
+  assert.equal(extended.summary.extendedDrivingDays, 1);
+  assert.match(extended.summary.breakNote, /10 saatlik uzatılmış sürüş/);
+  assert.match(extended.summary.breakNote, /varış 10 sa 15 dk gecikir/);
+  assert.match(extended.summary.routeNotice ?? '', /60 km\/sa ortalama/);
+  assert.doesNotMatch(extended.summary.routeNotice ?? '', /65/);
 
-  const at60 = mapsTiming(route, { planningSpeedKmh: 60 });
-  assert.equal(at60.summary.drivingDuration, '9 sa 10 dk');
-  assert.equal(at60.summary.breakDuration, '11 sa 45 dk');
-  assert.equal(at60.summary.estimatedDuration, '20 sa 55 dk');
-  assert.match(at60.summary.routeNotice ?? '', /60 km\/sa ortalama/);
+  const noExtension = mapsTiming(route, { maxExtendedDays: 0 });
+  assert.equal(noExtension.summary.breakDuration, '11 sa 45 dk');
+  assert.equal(noExtension.summary.estimatedDuration, '20 sa 55 dk');
+  assert.equal(noExtension.summary.extendedDrivingDays, undefined);
 
   const at65 = mapsTiming(route, { planningSpeedKmh: 65 });
   assert.equal(at65.summary.drivingDuration, '8 sa 28 dk');
@@ -54,8 +58,10 @@ test('planning speed uses 65 only to avoid a near-arrival overnight rest and kee
   assert.match(at65.summary.routeNotice ?? '', /65 km\/sa ortalama/);
   assert.match(at65.summary.breakNote, /Gerçek sürüş\/takograf hesabı değildir/);
 
+  // More than 10 h of driving cannot be saved by an extension: the 11 h rest stays.
   const longer = mapsTiming({ ...route, distance: { text: '650 km', value: 650_000 } });
-  assert.match(longer.summary.routeNotice ?? '', /60 km\/sa ortalama/);
+  assert.equal(longer.summary.extendedDrivingDays, undefined);
+  assert.match(longer.summary.breakDuration ?? '', /^11 sa 45 dk$/);
 
   const mapsFloor = mapsTiming({
     ...route,
@@ -105,7 +111,7 @@ test('Maps sums all legs for an intermediate stop and preserves traffic duration
     const body = JSON.parse(String(requestInit?.body));
     assert.equal(body.routingPreference,'TRAFFIC_AWARE');
     assert.equal(body.departureTime,departureTime.toISOString());
-    assert.deepEqual(body.intermediates,[{location:{latLng:{latitude:40,longitude:30}}}]);
+    assert.deepEqual(body.intermediates,[{location:{latLng:{latitude:40,longitude:30}},via:true}]);
     assert.deepEqual(body.routeModifiers,{avoidFerries:true});
   } finally {
     globalThis.fetch=oldFetch;
@@ -128,4 +134,21 @@ test('Maps reports the Routes API error message when the request is denied', asy
     globalThis.fetch=oldFetch;
     if(oldKey===undefined) delete process.env.GOOGLE_MAPS_API_KEY; else process.env.GOOGLE_MAPS_API_KEY=oldKey;
   }
+});
+
+test('summary splits breaks from overnight rests and dates the arrival', () => {
+  const route = { distance: { value: 645_000 }, duration: { value: 60 } } as DirectionsResult;
+  const timing = mapsTiming(route, { departureTime: '2026-11-17T07:18:00.000Z' });
+  assert.equal(timing.summary.shortBreakCount, 1);
+  assert.equal(timing.summary.dailyRestCount, 1);
+  assert.equal(timing.summary.departureTime, '2026-11-17T07:18:00.000Z');
+  // 10 h 45 min driving + 45 min break + 11 h rest = 22 h 30 min.
+  assert.equal(timing.summary.arrivalTime, '2026-11-18T05:48:00.000Z');
+  assert.match(timing.summary.durationLabel ?? '', /gece dinlenmesi dahil/);
+
+  const sameDay = mapsTiming({ distance: { value: 300_000 }, duration: { value: 60 } } as DirectionsResult);
+  assert.equal(sameDay.summary.shortBreakCount, 1);
+  assert.equal(sameDay.summary.dailyRestCount, 0);
+  assert.equal(sameDay.summary.arrivalTime, undefined);
+  assert.equal(sameDay.summary.durationLabel, 'Toplam yolculuk (mola dahil)');
 });

@@ -43,7 +43,7 @@ export default function Header() {
             <div className="flex h-16 items-center justify-between px-6 max-w-[1400px] mx-auto">
                 <div className="flex items-center gap-8">
                     <Link href="/dashboard" className="flex items-center gap-2 font-bold text-xl text-gray-900">
-                        <div className="h-8 w-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold">
+                        <div className="h-8 w-8 bg-[#14213D] rounded-md flex items-center justify-center text-white font-bold">
                             J
                         </div>
                         <span>AI JMP</span>

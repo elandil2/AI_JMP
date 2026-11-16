@@ -30,7 +30,16 @@ const friendlyCreateError = (payload: CreateReportFailure | null): string => {
   return "Rapor oluşturulamadı. Lütfen bilgileri kontrol edip tekrar deneyin.";
 };
 
+// Total İzmir FTL loading point (TOTAL CONTAINER FTL / Total Turkey Pazarlama, Menemen).
+const TOTAL_MENEMEN = { city: "izmir", county: "menemen", lat: 38.6266439, lng: 27.0558707 };
+
+const selectClass = "min-h-11 w-full rounded-xl border border-slate-200 px-3 py-3 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white";
+
 export default function NewReportPage() {
+  const [fromTotalTerminal, setFromTotalTerminal] = useState(true);
+  const [viaCity, setViaCity] = useState("");
+  const [viaCounty, setViaCounty] = useState("");
+  const [driverHasExtension, setDriverHasExtension] = useState(true);
   const [originCity, setOriginCity] = useState("");
   const [originCounty, setOriginCounty] = useState("");
   const [destinationCity, setDestinationCity] = useState("");
@@ -75,6 +84,10 @@ export default function NewReportPage() {
     return cities.find((c) => c.name === destinationCity)?.counties || [];
   }, [cities, destinationCity]);
 
+  const viaCounties = useMemo(() => {
+    return cities.find((c) => c.name === viaCity)?.counties || [];
+  }, [cities, viaCity]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -96,8 +109,11 @@ export default function NewReportPage() {
       const res = await authFetch("/api/reports", {
         method: "POST",
         body: JSON.stringify({
-          originCity,
-          originCounty,
+          ...(fromTotalTerminal
+            ? { originCity: TOTAL_MENEMEN.city, originCounty: TOTAL_MENEMEN.county, originLat: TOTAL_MENEMEN.lat, originLng: TOTAL_MENEMEN.lng }
+            : { originCity, originCounty }),
+          ...(viaCity ? { stopCity: viaCity, stopCounty: viaCounty || undefined } : {}),
+          driverHasExtension,
           destinationCity,
           destinationCounty,
           departureTime: departureTimeIso,
@@ -142,9 +158,16 @@ export default function NewReportPage() {
 
         <form onSubmit={handleSubmit} className="bg-white border border-slate-200 rounded-2xl shadow p-6 space-y-4">
           <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
-            İl ve ilçe seçimi merkez koordinatlarını kullanır. Gerçek Total terminali veya müşteri tesisinin giriş noktası seçilmediği için mesafe, harita ve mola konumları yaklaşık kalır.
+            {fromTotalTerminal
+              ? "Çıkış Total Menemen terminalinin koordinatıdır. Varış ve ara durak için il/ilçe merkez koordinatı kullanılır; bayi giriş noktası seçilmediği için varış tarafı yaklaşık kalır."
+              : "İl ve ilçe seçimi merkez koordinatlarını kullanır. Gerçek tesis giriş noktası seçilmediği için mesafe, harita ve mola konumları yaklaşık kalır."}
           </p>
+          <label className="min-h-11 flex items-center gap-3 rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-800 cursor-pointer">
+            <input type="checkbox" className="h-4 w-4 accent-blue-600" checked={fromTotalTerminal} onChange={(e) => setFromTotalTerminal(e.target.checked)} />
+            <span><span className="font-semibold">Çıkış: Total Menemen terminali</span> <span className="text-slate-500">(işareti kaldırırsan başlangıç il/ilçe seçilir)</span></span>
+          </label>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {!fromTotalTerminal && (<>
             <div className="space-y-1">
               <label htmlFor="origin-city" className="text-xs uppercase text-slate-500 font-semibold">Başlangıç ili</label>
               <select
@@ -156,7 +179,7 @@ export default function NewReportPage() {
                 }}
                 className="min-h-11 w-full rounded-xl border border-slate-200 px-3 py-3 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                 disabled={locationsLoading}
-                required
+                required={!fromTotalTerminal}
               >
                 <option value="">{locationsLoading ? "Yükleniyor..." : "İl seçin"}</option>
                 {cities.map((city) => (
@@ -183,6 +206,7 @@ export default function NewReportPage() {
                 ))}
               </select>
             </div>
+            </>)}
             <div className="space-y-1">
               <label htmlFor="destination-city" className="text-xs uppercase text-slate-500 font-semibold">Varış ili</label>
               <select
@@ -222,6 +246,21 @@ export default function NewReportPage() {
               </select>
             </div>
             <div className="space-y-1">
+              <label htmlFor="via-city" className="text-xs uppercase text-slate-500 font-semibold">Ara durak ili (güzergâh, isteğe bağlı)</label>
+              <select id="via-city" value={viaCity} onChange={(e) => { setViaCity(e.target.value); setViaCounty(""); }} className={selectClass} disabled={locationsLoading}>
+                <option value="">Yok — Google en hızlı yolu seçer</option>
+                {cities.map((city) => <option key={city.name} value={city.name}>{city.name}</option>)}
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label htmlFor="via-county" className="text-xs uppercase text-slate-500 font-semibold">Ara durak ilçesi</label>
+              <select id="via-county" value={viaCounty} onChange={(e) => setViaCounty(e.target.value)} className={selectClass} disabled={!viaCity || viaCounties.length === 0 || locationsLoading}>
+                <option value="">{viaCity ? "İl merkezi" : "Önce ara durak ili seçin"}</option>
+                {viaCounties.map((county) => <option key={county} value={county}>{county}</option>)}
+              </select>
+            </div>
+            <p className="md:col-span-2 -mt-2 text-xs text-slate-500">Ara durak yükleme/boşaltma değildir; yalnızca rotanın oradan geçmesini sağlar (ör. dağ yolu yerine "Eskişehir üzerinden").</p>
+            <div className="space-y-1">
               <label htmlFor="departure-time" className="text-xs uppercase text-slate-500 font-semibold">Kalkış zamanı (isteğe bağlı)</label>
               <input
                 id="departure-time"
@@ -241,6 +280,11 @@ export default function NewReportPage() {
             </div>
             Ücretli yolları kullan
             <input id="use-tolls" type="checkbox" className="sr-only" checked={useTolls} onChange={(e) => setUseTolls(e.target.checked)} />
+          </label>
+
+          <label htmlFor="driver-extension" className="min-h-11 flex items-start gap-3 text-sm text-slate-700 cursor-pointer select-none">
+            <input id="driver-extension" type="checkbox" className="mt-1 h-4 w-4 accent-blue-600" checked={driverHasExtension} onChange={(e) => setDriverHasExtension(e.target.checked)} />
+            <span>Sürücünün bu hafta 10 saatlik uzatılmış sürüş hakkı var <span className="block text-xs text-slate-500">Haftada en fazla 2 kez. Hakkı yoksa işareti kaldır; plan 9 saatlik günle yapılır.</span></span>
           </label>
 
           {locationsError && (

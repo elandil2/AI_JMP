@@ -151,8 +151,9 @@ const routeAgent = async (ai: GeminiClient, model: GeminiModel, origin: string, 
     });
   }
   if (mapsData) {
-    const timing = mapsTiming(mapsData);
-    const routePlan = buildMapsRoutePlan(mapsData, { originName: origin, destinationName: destination });
+    const maxExtendedDays = options?.maxExtendedDays;
+    const timing = mapsTiming(mapsData, { departureTime: options?.departureTime ?? new Date(), maxExtendedDays });
+    const routePlan = buildMapsRoutePlan(mapsData, { originName: origin, destinationName: destination, maxExtendedDays });
     const stride = Math.max(1, Math.ceil(mapsData.steps.length / 40));
     const routeSteps = mapsData.steps.filter((_, index) => index % stride === 0)
       .map(step => step.instruction).filter(Boolean).join(' · ').slice(0, 3500);
@@ -194,7 +195,7 @@ const criticalAnalysisAgent = async (ai: GeminiClient, model: GeminiModel, route
   const departureIso = options?.departureTime ?? new Date().toISOString();
   const prompt = `
     GÖREV: Tır rotası için Kapsamlı Yol Güvenliği, Risk ve Kritik Nokta Analizi.
-    ROTA: ${origin} -> ${destination}
+    ROTA: ${origin} -> ${destination}${options?.stopName ? ` (${options.stopName} üzerinden; bu yalnızca güzergâh noktasıdır, durak değildir)` : ''}
     GÜZERGAH DETAYI: ${routeDescription}
     PLANLANAN SÜRE: ${durationHours.toFixed(1)} saat
     HESAPLANMIŞ PLAN: ${JSON.stringify(summary)}
@@ -208,11 +209,10 @@ const criticalAnalysisAgent = async (ai: GeminiClient, model: GeminiModel, route
     3. timeline: Şoför ve operasyon için adım adım kronolojik yolculuk akışı.
        - Başlangıç (start)
        - Güzergahtaki kritik geçitler, viyadükler, tüneller (warning veya danger)
-       - 4.5 saatlik sürüş sonrası zorunlu dinlenme molası (break, 45 dk dinlenme tesisi)
-       - Varsa 9 saat sürüş sonrası günlük dinlenme (break, 11 saat konaklama)
+       - Mola ve günlük dinlenme EKLEME: bunlar HESAPLANMIŞ PLAN'da sabittir ve sistem tarafından eklenir.
        - Varış yaklaşımı ve varış (end)
        Her timeline elemanında: {"id": "t-1", "title": "...", "description": "...", "type": "start|info|warning|danger|break|end", "icon": "start|traffic|wind|descent|toll|break|danger|end"}
-    4. criticalPoints: Rota üzerinde şoförün dikkat etmesi gereken önemli noktalar (dağ geçişi, tünel, viyadük, yol yapımı, kaza noktası, mola tesisi). En az 4-6 nokta olmalıdır.
+    4. criticalPoints: Rota üzerinde şoförün dikkat etmesi gereken önemli noktalar (dağ geçişi, tünel, viyadük, yol yapımı, kaza noktası). Mola tesisi, tır parkı veya dinlenme yeri ÖNERME; mola yerleri HESAPLANMIŞ PLAN'da sabittir. En az 4-6 nokta olmalıdır.
        Her nokta için:
        {
          "id": "cp-1",
@@ -223,11 +223,18 @@ const criticalAnalysisAgent = async (ai: GeminiClient, model: GeminiModel, route
          "incident": { "type": "roadwork|accident|closure|traffic|hazard|weather|tunnel|break|warning|info", "description": "Somut risk/uyarı açıklaması", "source": "KGM / Karayolları / Yerel Kaynak" }
        }
     5. mandatoryBreak: "Gerekir" veya "Gerekmez"
-    6. breakNote: Mola ve takograf tavsiyesi (4.5 saat kuralı, önerilen tesisler).
+    6. breakNote: Kısa takograf hatırlatması. Mola yeri veya tesis önerme; HESAPLANMIŞ PLAN ile çelişme.
 
     Yalnızca geçerli bir JSON nesnesi döndür.
   `;
   return generateWithTelemetry(ai, { model, contents: prompt, config: { tools: [{ googleSearch: {} }] } }, 'critical', model, value => validateCriticalAnalysis(value, { dropInvalidPoints: true }), options);
+};
+
+const viaPoint = (options?: RouteOptions) => {
+  const [lat, lng] = (options?.stopCoords ?? '').split(',').map(part => Number(part.trim()));
+  return Number.isFinite(lat) && Number.isFinite(lng) && options?.stopCoords
+    ? { name: options.stopName?.trim() || options.stopCoords, lat, lng }
+    : undefined;
 };
 
 export const analyzeRoute = async (originName: string, destinationName: string, originCoords?: string, destCoords?: string, options?: RouteOptions): Promise<RouteAnalysis> => {
@@ -268,7 +275,9 @@ export const analyzeRoute = async (originName: string, destinationName: string, 
 
   const criticalResult = criticalOutcome.result;
   const analysis = criticalResult.data as any;
-  const rawPoints = (analysis.criticalPoints as CriticalPoint[]) || [];
+  // With a Maps plan the engine owns rest positions; drop Gemini's own rest/park suggestions.
+  const rawPoints = ((analysis.criticalPoints as CriticalPoint[]) || [])
+    .filter(point => !routeData.routePlan || point.incident?.type !== 'break');
 
   const assessedPoints: CriticalPoint[] = rawPoints.map((point, index) => {
     const routeVerification = checkCoordinateAgainstRoute(routeData.mapsPolyline, point.coordinate);
@@ -357,7 +366,7 @@ export const analyzeRoute = async (originName: string, destinationName: string, 
           const target = breakTargets[breakIndex++];
           if (target) {
             const nearest = target.coordinate ? findNearestLocation(target.coordinate.lat, target.coordinate.lng) : null;
-            const placeStr = nearest ? formatLocationName(nearest.county, nearest.city) : 'Güzergâh Tesisleri';
+            const placeStr = nearest ? formatLocationName(nearest.county, nearest.city) : `${node.distanceFromStart} civarı`;
             const restLabel = target.kind === 'daily_rest' ? '11 sa Günlük Dinlenme' : '45 dk Mola';
             const wholeHours = Math.floor(target.driveThresholdHours);
             const minutes = Math.round((target.driveThresholdHours % 1) * 60);
@@ -429,8 +438,9 @@ export const analyzeRoute = async (originName: string, destinationName: string, 
   return {
     summary: {
       ...routeData.summary,
-      mandatoryBreak: analysis.mandatoryBreak || routeData.summary.mandatoryBreak,
-      breakNote: analysis.breakNote || routeData.summary.breakNote,
+      // The rule engine's plan wins whenever Maps produced one; Gemini text is only a fallback.
+      mandatoryBreak: routeData.routePlan ? routeData.summary.mandatoryBreak : (analysis.mandatoryBreak || routeData.summary.mandatoryBreak),
+      breakNote: routeData.routePlan ? routeData.summary.breakNote : (analysis.breakNote || routeData.summary.breakNote),
       sourceCoverage: 'unverified',
       incidentProviderCoverage: tomtomCoverage?.status === 'available' || mapboxCoverage?.status === 'available'
         ? 'available' : 'unknown',
@@ -456,6 +466,8 @@ export const analyzeRoute = async (originName: string, destinationName: string, 
     timeline,
     criticalPoints: allPoints,
     routeSchematic,
-    groundingMetadata: dedupeGroundingChunks([...criticalResult.sources, ...weatherResult.sources])
+    groundingMetadata: dedupeGroundingChunks([...criticalResult.sources, ...weatherResult.sources]),
+    ...(viaPoint(options) ? { via: viaPoint(options) } : {}),
+    ...(options?.maxExtendedDays === 0 ? { driverHasExtension: false } : {})
   };
 };

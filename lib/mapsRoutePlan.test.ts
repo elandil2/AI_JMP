@@ -92,19 +92,30 @@ test('route schematic uses ordered Maps road boundaries with cumulative km and p
   assert.equal(plan.routeSchematic.nodes[0].name, 'Menemen');
   assert.equal(plan.routeSchematic.nodes.at(-1)?.name, 'Arguvan');
   assert.equal(plan.routeSchematic.totalDistance, '600 km');
-  assert.equal(plan.routeSchematic.totalDuration, '21 sa 45 dk');
+  // 10 h of driving fits a 10 h extended day: two 45 min breaks, no 11 h rest before arrival.
+  assert.equal(plan.routeSchematic.totalDuration, '11 sa 30 dk');
 });
 
-test('break and daily-rest markers snap to Maps steps and never invent a facility', () => {
-  const plan = buildMapsRoutePlan(makeDirections());
+test('break and daily-rest markers sit exactly at the driving threshold on the route line and never invent a facility', () => {
+  const plan = buildMapsRoutePlan(makeDirections(), { maxExtendedDays: 0 });
   assert.deepEqual(plan.breakTargets.map(target => target.kind), ['break', 'daily_rest']);
   assert.deepEqual(plan.breakTargets.map(target => target.driveThresholdHours), [4.5, 9]);
-  assert.deepEqual(plan.breakTargets.map(target => target.snappedBoundaryDistanceMeters), [300_000, 500_000]);
+  assert.deepEqual(plan.breakTargets.map(target => Math.round(target.thresholdDistanceMeters)), [270_000, 540_000]);
+  // Interpolated inside 100 km Maps steps, not snapped to the 300/500 km step ends.
+  assert.deepEqual(plan.breakTargets.map(target => target.coordinate && [+target.coordinate.lat.toFixed(3), +target.coordinate.lng.toFixed(3)]), [[38.27, 27.27], [38.54, 27.54]]);
   assert.deepEqual(plan.breakTargets.map(target => target.breakMinutes), [45, 660]);
   assert.deepEqual(plan.breakTargets.map(target => target.timeFromStartHours), [5.25, 20.75]);
   assert.ok(plan.breakTargets.every(target => target.name.startsWith('Planlama noktası')));
   assert.ok(plan.breakTargets.every(target => !/anlaşmalı|tesis|park yeri/i.test(target.name)));
-  assert.equal(plan.routeSchematic.nodes.filter(node => node.type === 'break').length, 2);
+  const breakNodes = plan.routeSchematic.nodes.filter(node => node.type === 'break');
+  assert.deepEqual(breakNodes.map(node => node.distanceFromStart), ['270 km', '540 km']);
+  assert.equal(plan.routeSchematic.totalDuration, '21 sa 45 dk');
+});
+
+test('a 10 h extended day replaces an 11 h rest just before arrival', () => {
+  const plan = buildMapsRoutePlan(makeDirections());
+  assert.deepEqual(plan.breakTargets.map(target => target.kind), ['break', 'break']);
+  assert.deepEqual(plan.breakTargets.map(target => target.timeFromStartHours), [5.25, 10.5]);
 });
 
 test('exact modeled arrival at 9 hours gets the 4.5-hour break but no post-arrival daily rest', () => {
@@ -119,14 +130,15 @@ test('exact modeled arrival at 9 hours gets the 4.5-hour break but no post-arriv
 test('sparse or incomplete Maps steps retain truthful endpoint schematic and no fabricated interior places', () => {
   const sparse = { ...makeDirections(), steps: makeDirections(2).steps };
   const plan = buildMapsRoutePlan(sparse);
-  assert.deepEqual(plan.routeSchematic.nodes.map(node => node.type), ['origin', 'destination']);
+  // Rests keep their planned km; without usable geometry they simply have no map coordinate.
+  assert.deepEqual(plan.routeSchematic.nodes.map(node => node.type), ['origin', 'break', 'break', 'destination']);
   assert.deepEqual(plan.weatherCheckpoints, []);
   assert.equal(plan.breakTargets.length, 2);
-  assert.ok(plan.breakTargets.every(target => target.snappedBoundaryDistanceMeters === undefined));
+  assert.ok(plan.breakTargets.every(target => target.coordinate === undefined));
 
   const noSteps = { ...makeDirections(), steps: [] };
   const noStepPlan = buildMapsRoutePlan(noSteps);
-  assert.deepEqual(noStepPlan.routeSchematic.nodes.map(node => node.name), ['Menemen başlangıcı', 'Arguvan varışı']);
+  assert.deepEqual(noStepPlan.routeSchematic.nodes.filter(node => node.type !== 'break').map(node => node.name), ['Menemen başlangıcı', 'Arguvan varışı']);
   assert.deepEqual(noStepPlan.weatherCheckpoints, []);
   assert.ok(noStepPlan.breakTargets.every(target => target.coordinate === undefined));
 });

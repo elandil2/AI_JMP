@@ -156,7 +156,7 @@ export async function getDirections(
       units: 'METRIC',
       // Truck-specific: avoid ferries typically
       routeModifiers: { avoidFerries: true, ...(options.useTolls === false ? { avoidTolls: true } : {}) },
-      ...(options.stopCoords ? { intermediates: [toWaypoint(options.stopCoords)] } : {}),
+      ...(options.stopCoords ? { intermediates: [{ ...toWaypoint(options.stopCoords), via: true }] } : {}),
       ...(travelMode === 'DRIVE' ? { routingPreference: trafficAware ? 'TRAFFIC_AWARE' : 'TRAFFIC_UNAWARE' } : {})
     };
     // Routes API rejects past departure times; omitting it means "now".
