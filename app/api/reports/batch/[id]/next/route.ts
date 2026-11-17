@@ -11,7 +11,7 @@ import type { RouteAnalysis } from "@/types";
 
 export const maxDuration = 300;
 
-type RawRow = { originCity: string; originCounty?: string; destinationCity: string; destinationCounty?: string };
+type RawRow = { originCity: string; originCounty?: string; destinationCity: string; destinationCounty?: string; originLat?: number; originLng?: number; viaCity?: string; viaCounty?: string; driverHasExtension?: boolean; operation?: "total" };
 type UsageEvent = Record<string, unknown>;
 
 const asNumber = (value: unknown) => typeof value === "number" && Number.isFinite(value) ? value : typeof value === "string" && value.trim() !== "" && Number.isFinite(Number(value)) ? Number(value) : null;
@@ -110,7 +110,12 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
   }
 
   const row = claimed.raw_json;
-  const origin = findLocation(row.originCity, row.originCounty);
+  const originMatch = findLocation(row.originCity, row.originCounty);
+  const fixedOrigin = typeof row.originLat === "number" && typeof row.originLng === "number";
+  const origin = fixedOrigin ? { ...originMatch, lat: row.originLat, lng: row.originLng } : originMatch;
+  const via = typeof row.viaCity === "string" && row.viaCity.trim() ? findLocation(row.viaCity, row.viaCounty || undefined) : undefined;
+  const stopCoords = via && via.lat !== undefined && via.lng !== undefined ? `${via.lat},${via.lng}` : undefined;
+  const stopName = stopCoords ? `${row.viaCity}${row.viaCounty ? `, ${row.viaCounty}` : ""}` : undefined;
   const destination = findLocation(row.destinationCity, row.destinationCounty);
   const originCoords = origin.lat !== undefined && origin.lng !== undefined ? `${origin.lat},${origin.lng}` : undefined;
   const destCoords = destination.lat !== undefined && destination.lng !== undefined ? `${destination.lat},${destination.lng}` : undefined;
@@ -149,7 +154,11 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
   };
 
   try {
-    const options = { useTolls: batch.use_tolls, departureTime: batch.departure_time ?? undefined, model: batch.model, onUsage };
+    const options = {
+      useTolls: batch.use_tolls, departureTime: batch.departure_time ?? undefined, model: batch.model, onUsage,
+      ...(stopCoords ? { stopCoords, stopName } : {}),
+      ...(row.driverHasExtension === false ? { maxExtendedDays: 0 } : {})
+    };
     const analysis: RouteAnalysis = sanitizeAnalysis(await analyzeRoute(originLabel, destinationLabel, originCoords, destCoords, options));
     assertPublishableRoute(analysis);
     const { error: reportUpdateError } = await supabase.from("reports").update({ analysis, status: "ready", error_message: null }).eq("id", report.id).eq("operator_id", auth.userId);

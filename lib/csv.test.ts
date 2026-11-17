@@ -46,3 +46,35 @@ test("row numbers in errors are physical CSV lines, skipping blank lines and quo
   assert.equal(result.rows[0]?.sourceRow, 3);
   assert.deepEqual(result.errors, ["5. satır: çıkış ili ve varış ili zorunlu"]);
 });
+
+test("Genel rows may carry an optional via city and county in columns 5-6", () => {
+  const result = parseBatchCsv("izmir,menemen,ankara,beypazarı,eskişehir,\nizmir,menemen,konya,karatay");
+  assert.deepEqual(result.errors, []);
+  assert.equal(result.rows[0].viaCity, "eskişehir");
+  assert.equal(result.rows[0].viaCounty, "");
+  assert.equal(result.rows[1].viaCity, undefined);
+});
+
+test("Total mode fixes the origin; rows are destination then optional via, with or without a header", () => {
+  const fixedOrigin = { city: "izmir", county: "menemen" };
+  const plain = parseBatchCsv("ankara,beypazarı,eskişehir,odunpazarı\nkonya,", { fixedOrigin });
+  assert.deepEqual(plain.errors, []);
+  assert.deepEqual(plain.rows.map(r => [r.originCity, r.originCounty, r.destinationCity, r.viaCity]), [["izmir", "menemen", "ankara", "eskişehir"], ["izmir", "menemen", "konya", undefined]]);
+  const headed = parseBatchCsv("Varış İli;Varış İlçesi;Ara Durak İli\nmalatya;yeşilyurt;aksaray", { fixedOrigin });
+  assert.deepEqual(headed.errors, []);
+  assert.equal(headed.rows[0].destinationCounty, "yeşilyurt");
+  assert.equal(headed.rows[0].viaCity, "aksaray");
+});
+
+test("Total mode rejects a Genel-format file instead of misreading its columns", () => {
+  const fixedOrigin = { city: "izmir", county: "menemen" };
+  const oldFormat = parseBatchCsv("izmir,menemen,ankara,yenimahalle", { fixedOrigin });
+  assert.equal(oldFormat.rows.length, 0);
+  assert.match(oldFormat.errors[0], /Total çıkış noktasıyla aynı/);
+  const otherOrigin = parseBatchCsv("çıkış ili,çıkış ilçesi,varış ili,varış ilçesi\nkocaeli,gebze,ankara,", { fixedOrigin });
+  assert.equal(otherOrigin.rows.length, 0);
+  assert.match(otherOrigin.errors[0], /Genel sekmesini/);
+  const menemenHeader = parseBatchCsv("çıkış ili,varış ili\nİzmir,ankara", { fixedOrigin });
+  assert.deepEqual(menemenHeader.errors, []);
+  assert.equal(menemenHeader.rows[0].destinationCity, "ankara");
+});

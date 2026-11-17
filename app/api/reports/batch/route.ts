@@ -9,7 +9,10 @@ const DEFAULT_MODEL = "gemini-3.7-flash";
 const ADMIN_MODELS = new Set(["gemini-2.5-flash", "gemini-3.8-flash"]);
 const MAX_ROWS = 20;
 
-type BatchRequest = { csv: string; fileName?: string; useTolls?: boolean; departureTime?: string | null; model?: string };
+type BatchRequest = { csv: string; fileName?: string; useTolls?: boolean; departureTime?: string | null; model?: string; operation?: "total" | "genel"; driverHasExtension?: boolean };
+
+// Total İzmir FTL loading point (TOTAL CONTAINER FTL / Total Turkey Pazarlama, Menemen).
+const TOTAL_MENEMEN = { city: "izmir", county: "menemen", lat: 38.6266439, lng: 27.0558707 };
 
 const getProfile = async (userId: string, email?: string) => {
   const supabase = getSupabaseAdmin();
@@ -30,8 +33,8 @@ const parsePayload = async (req: Request): Promise<BatchRequest | { error: strin
   return contentType.includes("text/csv") ? { csv: await req.text() } : { error: "Send CSV text or JSON { csv: string }" };
 };
 
-const rowKey = (row: { originCity: string; originCounty: string; destinationCity: string; destinationCounty: string }) =>
-  [row.originCity, row.originCounty, row.destinationCity, row.destinationCounty].map((value) => value.trim().normalize("NFC").toLocaleLowerCase("tr-TR")).join("\u001f");
+const rowKey = (row: { originCity: string; originCounty: string; destinationCity: string; destinationCounty: string; viaCity?: string; viaCounty?: string }) =>
+  [row.originCity, row.originCounty, row.destinationCity, row.destinationCounty, row.viaCity ?? "", row.viaCounty ?? ""].map((value) => value.trim().normalize("NFC").toLocaleLowerCase("tr-TR")).join("\u001f");
 
 export async function POST(req: Request) {
   const auth = await requireAuth();
@@ -39,7 +42,9 @@ export async function POST(req: Request) {
   const payload = await parsePayload(req);
   if ("error" in payload) return NextResponse.json({ error: payload.error }, { status: 400 });
 
-  const parsed = parseBatchCsv(payload.csv);
+  const total = payload.operation !== "genel";
+  if (payload.driverHasExtension !== undefined && typeof payload.driverHasExtension !== "boolean") return NextResponse.json({ error: "Geçersiz sürücü hakkı bilgisi" }, { status: 400 });
+  const parsed = parseBatchCsv(payload.csv, total ? { fixedOrigin: { city: TOTAL_MENEMEN.city, county: TOTAL_MENEMEN.county } } : {});
   if (parsed.errors.length) return NextResponse.json({ error: "CSV doğrulanamadı", errors: parsed.errors }, { status: 400 });
   if (!parsed.rows.length) return NextResponse.json({ error: "Geçerli satır bulunamadı" }, { status: 400 });
   if (parsed.rows.length > MAX_ROWS) return NextResponse.json({ error: `Bir kuyrukta en fazla ${MAX_ROWS} satır olabilir` }, { status: 400 });
@@ -62,7 +67,12 @@ export async function POST(req: Request) {
     departureTime = date.toISOString();
   }
   const useTolls = payload.useTolls ?? true;
-  const canonicalRows = parsed.rows.map(({ sourceRow: _, ...row }) => row);
+  // Per-row options live in raw_json, so the batch tables need no new columns.
+  const canonicalRows = parsed.rows.map(({ sourceRow: _, ...row }) => ({
+    ...row,
+    ...(total ? { originLat: TOTAL_MENEMEN.lat, originLng: TOTAL_MENEMEN.lng, operation: "total" as const } : {}),
+    ...(payload.driverHasExtension === false ? { driverHasExtension: false } : {})
+  }));
   const inputHash = createHash("sha256").update(JSON.stringify({ rows: canonicalRows, useTolls, departureTime })).digest("hex");
   const supabase = getSupabaseAdmin();
   const { data: batch, error: batchError } = await supabase
