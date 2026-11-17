@@ -33,7 +33,17 @@ const friendlyCreateError = (payload: CreateReportFailure | null): string => {
 // Total İzmir FTL loading point (TOTAL CONTAINER FTL / Total Turkey Pazarlama, Menemen).
 const TOTAL_MENEMEN = { city: "izmir", county: "menemen", lat: 38.6266439, lng: 27.0558707 };
 
-const selectClass = "min-h-11 w-full rounded-xl border border-slate-200 px-3 py-3 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white";
+// Same palette as the dashboard: warm paper, ink navy, one signal red.
+const MONO = "font-['IBM_Plex_Mono',ui-monospace,monospace]";
+const SANS = "font-['IBM_Plex_Sans',Inter,system-ui,sans-serif]";
+const selectClass = "min-h-11 w-full rounded-md border border-[#14213D]/15 bg-white px-3 py-2.5 text-[15px] text-[#14213D] focus:outline-none focus:ring-2 focus:ring-[#14213D]/40 disabled:bg-[#F4F2EE] disabled:text-slate-400";
+const labelClass = `${MONO} text-[11px] uppercase tracking-[0.12em] text-slate-500`;
+
+const Toggle = ({ on }: { on: boolean }) => (
+  <span className={`relative h-6 w-11 shrink-0 rounded-full transition ${on ? "bg-[#14213D]" : "bg-slate-300"}`} aria-hidden>
+    <span className={`absolute top-1 h-4 w-4 rounded-full bg-white shadow transition-all ${on ? "left-6" : "left-1"}`} />
+  </span>
+);
 
 export default function NewReportPage() {
   const [fromTotalTerminal, setFromTotalTerminal] = useState(true);
@@ -145,172 +155,186 @@ export default function NewReportPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className={`min-h-screen bg-[#F4F2EE] ${SANS}`}>
+      <link rel="preconnect" href="https://fonts.googleapis.com" />
+      <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" />
       <Header />
-      <main className="px-4 py-6 sm:px-6 sm:py-8 mx-auto max-w-4xl space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-xs uppercase tracking-[0.2em] text-slate-500 font-semibold">Rapor</p>
-            <h1 className="text-2xl font-bold text-slate-900">Yeni Rapor Oluştur</h1>
+
+      {/* Masthead with the operation switch */}
+      <section className="bg-[#14213D] text-white">
+        <div className="mx-auto max-w-5xl px-4 sm:px-6 pt-6 pb-6">
+          <Link href="/dashboard" className={`${MONO} text-[11px] uppercase tracking-[0.14em] text-white/60 hover:text-white`}>← Rota raporları</Link>
+          <h1 className="mt-2 text-3xl sm:text-4xl font-semibold tracking-tight">Yeni sefer raporu</h1>
+          <p className="mt-2 max-w-xl text-sm text-white/65">Rota, mola planı ve yol uyarıları yaklaşık bir dakikada hazırlanır.</p>
+          <div role="radiogroup" aria-label="Operasyon" className="mt-6 grid w-full grid-cols-2 gap-1 rounded-lg bg-white/10 p-1 sm:inline-grid sm:w-auto">
+            {[
+              { total: true, title: "Total FTL", sub: "Menemen terminalinden" },
+              { total: false, title: "Genel", sub: "Başlangıcı sen seç" }
+            ].map(option => {
+              const active = fromTotalTerminal === option.total;
+              return (
+                <button
+                  key={option.title}
+                  type="button"
+                  role="radio"
+                  aria-checked={active}
+                  onClick={() => setFromTotalTerminal(option.total)}
+                  className={`min-h-12 rounded-md px-4 py-2 text-left transition sm:min-w-[200px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-white ${active ? "bg-white text-[#14213D] shadow-sm" : "text-white/75 hover:bg-white/10 hover:text-white"}`}
+                >
+                  <span className="block text-sm font-semibold">{option.title}</span>
+                  <span className={`block text-xs ${active ? "text-slate-500" : "text-white/55"}`}>{option.sub}</span>
+                </button>
+              );
+            })}
           </div>
-          {/* Dashboard link removed as it is in the Header */}
         </div>
+      </section>
 
-        <form onSubmit={handleSubmit} className="bg-white border border-slate-200 rounded-2xl shadow p-6 space-y-4">
-          <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
-            {fromTotalTerminal
-              ? "Çıkış Total Menemen terminalinin koordinatıdır. Varış ve ara durak için il/ilçe merkez koordinatı kullanılır; bayi giriş noktası seçilmediği için varış tarafı yaklaşık kalır."
-              : "İl ve ilçe seçimi merkez koordinatlarını kullanır. Gerçek tesis giriş noktası seçilmediği için mesafe, harita ve mola konumları yaklaşık kalır."}
-          </p>
-          <label className="min-h-11 flex items-center gap-3 rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-800 cursor-pointer">
-            <input type="checkbox" className="h-4 w-4 accent-blue-600" checked={fromTotalTerminal} onChange={(e) => setFromTotalTerminal(e.target.checked)} />
-            <span><span className="font-semibold">Çıkış: Total Menemen terminali</span> <span className="text-slate-500">(işareti kaldırırsan başlangıç il/ilçe seçilir)</span></span>
-          </label>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {!fromTotalTerminal && (<>
-            <div className="space-y-1">
-              <label htmlFor="origin-city" className="text-xs uppercase text-slate-500 font-semibold">Başlangıç ili</label>
-              <select
-                id="origin-city"
-                value={originCity}
-                onChange={(e) => {
-                  setOriginCity(e.target.value);
-                  setOriginCounty("");
-                }}
-                className="min-h-11 w-full rounded-xl border border-slate-200 px-3 py-3 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                disabled={locationsLoading}
-                required={!fromTotalTerminal}
-              >
-                <option value="">{locationsLoading ? "Yükleniyor..." : "İl seçin"}</option>
-                {cities.map((city) => (
-                  <option key={city.name} value={city.name}>
-                    {city.name}
-                  </option>
+      <main className="mx-auto max-w-5xl px-4 sm:px-6 py-8">
+        <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_260px]">
+          <form onSubmit={handleSubmit} className="space-y-6">
+            {/* 01 Route */}
+            <section className="rounded-md border border-[#14213D]/10 bg-white p-5 sm:p-6" aria-labelledby="sec-route">
+              <h2 id="sec-route" className="flex items-baseline gap-3 text-base font-semibold text-[#14213D]">
+                <span className={`${MONO} text-xs text-[#D7192D]`}>01</span> Güzergâh
+              </h2>
+              <p className="mt-3 border-l-2 border-amber-400 pl-3 text-xs leading-5 text-slate-600">
+                {fromTotalTerminal
+                  ? "Çıkış Total Menemen terminalinin koordinatıdır. Varış ve ara durak için il/ilçe merkez koordinatı kullanılır; bayi giriş noktası seçilmediği için varış tarafı yaklaşık kalır."
+                  : "İl ve ilçe seçimi merkez koordinatlarını kullanır. Gerçek tesis giriş noktası seçilmediği için mesafe, harita ve mola konumları yaklaşık kalır."}
+              </p>
+
+              <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
+                {fromTotalTerminal ? (
+                  <div className="space-y-1 md:col-span-2">
+                    <span className={labelClass}>Çıkış</span>
+                    <div className="flex min-h-11 items-center gap-3 rounded-md border border-[#14213D]/10 bg-[#F4F2EE] px-3">
+                      <span className="h-2.5 w-2.5 shrink-0 rounded-full border-2 border-[#14213D]" aria-hidden />
+                      <span className="font-medium text-[#14213D]">Total Menemen terminali</span>
+                      <span className={`${MONO} ml-auto hidden text-xs text-slate-400 sm:inline`}>38.6266, 27.0559</span>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="space-y-1">
+                      <label htmlFor="origin-city" className={labelClass}>Başlangıç ili</label>
+                      <select id="origin-city" value={originCity} onChange={(e) => { setOriginCity(e.target.value); setOriginCounty(""); }} className={selectClass} disabled={locationsLoading} required>
+                        <option value="">{locationsLoading ? "Yükleniyor..." : "İl seçin"}</option>
+                        {cities.map((city) => <option key={city.name} value={city.name}>{city.name}</option>)}
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label htmlFor="origin-county" className={labelClass}>Başlangıç ilçesi</label>
+                      <select id="origin-county" value={originCounty} onChange={(e) => setOriginCounty(e.target.value)} className={selectClass} disabled={!originCity || originCounties.length === 0 || locationsLoading}>
+                        <option value="">{originCity ? "İlçe seçin (isteğe bağlı)" : "Önce il seçin"}</option>
+                        {originCounties.map((county) => <option key={county} value={county}>{county}</option>)}
+                      </select>
+                    </div>
+                  </>
+                )}
+
+                <div className="space-y-1">
+                  <label htmlFor="destination-city" className={labelClass}>Varış ili</label>
+                  <select id="destination-city" value={destinationCity} onChange={(e) => { setDestinationCity(e.target.value); setDestinationCounty(""); }} className={selectClass} disabled={locationsLoading} required>
+                    <option value="">{locationsLoading ? "Yükleniyor..." : "İl seçin"}</option>
+                    {cities.map((city) => <option key={city.name} value={city.name}>{city.name}</option>)}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label htmlFor="destination-county" className={labelClass}>Varış ilçesi</label>
+                  <select id="destination-county" value={destinationCounty} onChange={(e) => setDestinationCounty(e.target.value)} className={selectClass} disabled={!destinationCity || destinationCounties.length === 0 || locationsLoading}>
+                    <option value="">{destinationCity ? "İlçe seçin (isteğe bağlı)" : "Önce il seçin"}</option>
+                    {destinationCounties.map((county) => <option key={county} value={county}>{county}</option>)}
+                  </select>
+                </div>
+
+                <div className="mt-1 grid grid-cols-1 gap-4 border-t border-dashed border-[#14213D]/15 pt-4 md:col-span-2 md:grid-cols-2">
+                  <div className="space-y-1">
+                    <label htmlFor="via-city" className={labelClass}>Ara durak ili · isteğe bağlı</label>
+                    <select id="via-city" value={viaCity} onChange={(e) => { setViaCity(e.target.value); setViaCounty(""); }} className={selectClass} disabled={locationsLoading}>
+                      <option value="">Yok — Google en hızlı yolu seçer</option>
+                      {cities.map((city) => <option key={city.name} value={city.name}>{city.name}</option>)}
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label htmlFor="via-county" className={labelClass}>Ara durak ilçesi</label>
+                    <select id="via-county" value={viaCounty} onChange={(e) => setViaCounty(e.target.value)} className={selectClass} disabled={!viaCity || viaCounties.length === 0 || locationsLoading}>
+                      <option value="">{viaCity ? "İl merkezi" : "Önce ara durak ili seçin"}</option>
+                      {viaCounties.map((county) => <option key={county} value={county}>{county}</option>)}
+                    </select>
+                  </div>
+                  <p className="text-xs text-slate-500 md:col-span-2">Ara durak yükleme/boşaltma değildir; yalnızca rotanın oradan geçmesini sağlar (ör. dağ yolu yerine &quot;Eskişehir üzerinden&quot;).</p>
+                </div>
+              </div>
+            </section>
+
+            {/* 02 Time and driver */}
+            <section className="rounded-md border border-[#14213D]/10 bg-white p-5 sm:p-6" aria-labelledby="sec-time">
+              <h2 id="sec-time" className="flex items-baseline gap-3 text-base font-semibold text-[#14213D]">
+                <span className={`${MONO} text-xs text-[#D7192D]`}>02</span> Zaman ve sürücü
+              </h2>
+              <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div className="space-y-1">
+                  <label htmlFor="departure-time" className={labelClass}>Kalkış zamanı · isteğe bağlı</label>
+                  <input id="departure-time" type="datetime-local" value={departureTime} onChange={(e) => setDepartureTime(e.target.value)} className={selectClass} />
+                  <p className="text-xs text-slate-500">Boş bırakılırsa şu an kabul edilir.</p>
+                </div>
+              </div>
+              <div className="mt-5 divide-y divide-[#14213D]/[0.07] border-t border-[#14213D]/[0.07]">
+                <label htmlFor="use-tolls" className="flex min-h-12 cursor-pointer select-none items-center justify-between gap-4 py-3 text-sm text-[#14213D]">
+                  <span>Ücretli yolları kullan <span className="block text-xs text-slate-500">Otoyol ve köprü gişeleri rotaya dahil edilir.</span></span>
+                  <Toggle on={useTolls} />
+                  <input id="use-tolls" type="checkbox" className="sr-only" checked={useTolls} onChange={(e) => setUseTolls(e.target.checked)} />
+                </label>
+                <label htmlFor="driver-extension" className="flex min-h-12 cursor-pointer select-none items-center justify-between gap-4 py-3 text-sm text-[#14213D]">
+                  <span>Sürücünün bu hafta 10 saatlik uzatma hakkı var <span className="block text-xs text-slate-500">Haftada en fazla 2 kez. Hakkı yoksa kapat; plan 9 saatlik günle yapılır.</span></span>
+                  <Toggle on={driverHasExtension} />
+                  <input id="driver-extension" type="checkbox" className="sr-only" checked={driverHasExtension} onChange={(e) => setDriverHasExtension(e.target.checked)} />
+                </label>
+              </div>
+            </section>
+
+            {locationsError && <div role="alert" className="rounded-md border-l-4 border-[#D7192D] bg-white px-4 py-3 text-sm text-[#B3121F]">Lokasyon listesi alınamadı: {locationsError}. Lütfen tekrar deneyin.</div>}
+            {error && <div role="alert" className="rounded-md border-l-4 border-[#D7192D] bg-white px-4 py-3 text-sm text-[#B3121F]">{error}</div>}
+            {reportLink && <div className="rounded-md border-l-4 border-amber-500 bg-white px-4 py-3 text-sm text-amber-900">Bu isteğe ait kaydı <Link className="font-semibold underline" href={reportLink}>görüntüleyin</Link>.</div>}
+            {resultLink && (
+              <div role="status" className="rounded-md border-l-4 border-emerald-600 bg-white px-4 py-3 text-sm text-emerald-800">
+                Rapor hazır. Sürücü bağlantısı:{" "}
+                <a className="break-all font-semibold underline" href={resultLink} target="_blank" rel="noreferrer">{resultLink}</a>
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="flex min-h-12 w-full items-center justify-center gap-2 rounded-md bg-[#D7192D] px-4 text-base font-semibold text-white hover:bg-[#BC1527] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#14213D] disabled:opacity-70"
+            >
+              {loading && <span className="h-2 w-2 animate-pulse rounded-full bg-white" aria-hidden />}
+              {loading ? "Rapor hazırlanıyor… (yaklaşık 1 dk)" : "Raporu oluştur"}
+            </button>
+          </form>
+
+          {/* Side rail */}
+          <aside className="space-y-6">
+            <section className="rounded-md border border-[#14213D]/10 bg-white p-4">
+              <h2 className={labelClass}>Raporda neler var</h2>
+              <ul className="mt-3 space-y-2.5 text-sm text-slate-700">
+                {["Google rotası, mesafe ve süre", "Kurallara göre mola ve gece dinlenmesi", "Yol uyarıları ve bölgesel risk", "Güzergâh hava durumu", "Sürücüyle paylaşılacak bağlantı"].map(item => (
+                  <li key={item} className="flex gap-2"><span className={`${MONO} w-4 shrink-0 text-[#D7192D]`}>→</span>{item}</li>
                 ))}
-              </select>
-            </div>
-            <div className="space-y-1">
-              <label htmlFor="origin-county" className="text-xs uppercase text-slate-500 font-semibold">Başlangıç ilçesi</label>
-              <select
-                id="origin-county"
-                value={originCounty}
-                onChange={(e) => setOriginCounty(e.target.value)}
-                className="min-h-11 w-full rounded-xl border border-slate-200 px-3 py-3 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                disabled={!originCity || originCounties.length === 0 || locationsLoading}
-              >
-                <option value="">{originCity ? "İlçe seçin (isteğe bağlı)" : "Önce il seçin"}</option>
-                {originCounties.map((county) => (
-                  <option key={county} value={county}>
-                    {county}
-                  </option>
-                ))}
-              </select>
-            </div>
-            </>)}
-            <div className="space-y-1">
-              <label htmlFor="destination-city" className="text-xs uppercase text-slate-500 font-semibold">Varış ili</label>
-              <select
-                id="destination-city"
-                value={destinationCity}
-                onChange={(e) => {
-                  setDestinationCity(e.target.value);
-                  setDestinationCounty("");
-                }}
-                className="min-h-11 w-full rounded-xl border border-slate-200 px-3 py-3 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                disabled={locationsLoading}
-                required
-              >
-                <option value="">{locationsLoading ? "Yükleniyor..." : "İl seçin"}</option>
-                {cities.map((city) => (
-                  <option key={city.name} value={city.name}>
-                    {city.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="space-y-1">
-              <label htmlFor="destination-county" className="text-xs uppercase text-slate-500 font-semibold">Varış ilçesi</label>
-              <select
-                id="destination-county"
-                value={destinationCounty}
-                onChange={(e) => setDestinationCounty(e.target.value)}
-                className="min-h-11 w-full rounded-xl border border-slate-200 px-3 py-3 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                disabled={!destinationCity || destinationCounties.length === 0 || locationsLoading}
-              >
-                <option value="">{destinationCity ? "İlçe seçin (isteğe bağlı)" : "Önce il seçin"}</option>
-                {destinationCounties.map((county) => (
-                  <option key={county} value={county}>
-                    {county}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="space-y-1">
-              <label htmlFor="via-city" className="text-xs uppercase text-slate-500 font-semibold">Ara durak ili (güzergâh, isteğe bağlı)</label>
-              <select id="via-city" value={viaCity} onChange={(e) => { setViaCity(e.target.value); setViaCounty(""); }} className={selectClass} disabled={locationsLoading}>
-                <option value="">Yok — Google en hızlı yolu seçer</option>
-                {cities.map((city) => <option key={city.name} value={city.name}>{city.name}</option>)}
-              </select>
-            </div>
-            <div className="space-y-1">
-              <label htmlFor="via-county" className="text-xs uppercase text-slate-500 font-semibold">Ara durak ilçesi</label>
-              <select id="via-county" value={viaCounty} onChange={(e) => setViaCounty(e.target.value)} className={selectClass} disabled={!viaCity || viaCounties.length === 0 || locationsLoading}>
-                <option value="">{viaCity ? "İl merkezi" : "Önce ara durak ili seçin"}</option>
-                {viaCounties.map((county) => <option key={county} value={county}>{county}</option>)}
-              </select>
-            </div>
-            <p className="md:col-span-2 -mt-2 text-xs text-slate-500">Ara durak yükleme/boşaltma değildir; yalnızca rotanın oradan geçmesini sağlar (ör. dağ yolu yerine "Eskişehir üzerinden").</p>
-            <div className="space-y-1">
-              <label htmlFor="departure-time" className="text-xs uppercase text-slate-500 font-semibold">Kalkış zamanı (isteğe bağlı)</label>
-              <input
-                id="departure-time"
-                type="datetime-local"
-                value={departureTime}
-                onChange={(e) => setDepartureTime(e.target.value)}
-                className="min-h-11 w-full rounded-xl border border-slate-200 px-3 py-3 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-          </div>
-
-          <label htmlFor="use-tolls" className="min-h-11 flex items-center gap-3 text-sm text-slate-700 cursor-pointer select-none">
-            <div className={`w-12 h-6 rounded-full p-1 transition-all ${useTolls ? "bg-blue-500" : "bg-slate-300"}`}>
-              <div
-                className={`bg-white w-4 h-4 rounded-full shadow transform transition ${useTolls ? "translate-x-6" : "translate-x-0"}`}
-              />
-            </div>
-            Ücretli yolları kullan
-            <input id="use-tolls" type="checkbox" className="sr-only" checked={useTolls} onChange={(e) => setUseTolls(e.target.checked)} />
-          </label>
-
-          <label htmlFor="driver-extension" className="min-h-11 flex items-start gap-3 text-sm text-slate-700 cursor-pointer select-none">
-            <input id="driver-extension" type="checkbox" className="mt-1 h-4 w-4 accent-blue-600" checked={driverHasExtension} onChange={(e) => setDriverHasExtension(e.target.checked)} />
-            <span>Sürücünün bu hafta 10 saatlik uzatılmış sürüş hakkı var <span className="block text-xs text-slate-500">Haftada en fazla 2 kez. Hakkı yoksa işareti kaldır; plan 9 saatlik günle yapılır.</span></span>
-          </label>
-
-          {locationsError && (
-            <div role="alert" className="text-sm text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">
-              Lokasyon listesi alınamadı: {locationsError}. Lütfen tekrar deneyin.
-            </div>
-          )}
-          {error && <div role="alert" className="text-sm text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">{error}</div>}
-          {reportLink && <div className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">Bu isteğe ait kaydı <Link className="underline font-semibold" href={reportLink}>görüntüleyin</Link>.</div>}
-          {resultLink && (
-            <div role="status" className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
-              Rapor hazır. Paylaş:{" "}
-              <a className="underline font-semibold" href={resultLink} target="_blank" rel="noreferrer">
-                {resultLink}
-              </a>
-            </div>
-          )}
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="min-h-11 w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl py-3 transition disabled:opacity-70"
-          >
-            {loading ? "Oluşturuluyor..." : "Rapor Oluştur"}
-          </button>
-        </form>
+              </ul>
+            </section>
+            <section className="rounded-md border border-[#14213D]/10 bg-white p-4">
+              <h2 className={labelClass}>Planlama kuralları</h2>
+              <ul className="mt-3 space-y-2 text-sm text-slate-700">
+                <li className="flex gap-2"><span className={`${MONO} w-14 shrink-0 whitespace-nowrap text-[#D7192D]`}>4,5 sa</span> sürüşten sonra 45 dk mola</li>
+                <li className="flex gap-2"><span className={`${MONO} w-14 shrink-0 whitespace-nowrap text-[#D7192D]`}>9 sa</span> günlük sürüş, haftada 2 gün 10 sa</li>
+                <li className="flex gap-2"><span className={`${MONO} w-14 shrink-0 whitespace-nowrap text-[#D7192D]`}>11 sa</span> günlük dinlenme</li>
+                <li className="flex gap-2"><span className={`${MONO} w-14 shrink-0 whitespace-nowrap text-[#D7192D]`}>60</span> km/sa planlama hızı</li>
+              </ul>
+            </section>
+          </aside>
+        </div>
       </main>
     </div>
   );
