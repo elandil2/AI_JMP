@@ -5,6 +5,7 @@ import Link from "next/link";
 import { authFetch } from "@/lib/apiClient";
 import Header from "@/components/Header";
 import { publicReportUrl } from "@/lib/publicReportUrl";
+import { TOTAL_MENEMEN } from "@/lib/totalOperation";
 
 type CityOption = {
   name: string;
@@ -30,8 +31,6 @@ const friendlyCreateError = (payload: CreateReportFailure | null): string => {
   return "Rapor oluşturulamadı. Lütfen bilgileri kontrol edip tekrar deneyin.";
 };
 
-// Total İzmir FTL loading point (TOTAL CONTAINER FTL / Total Turkey Pazarlama, Menemen).
-const TOTAL_MENEMEN = { city: "izmir", county: "menemen", lat: 38.6266439, lng: 27.0558707 };
 
 // Same palette as the dashboard: warm paper, ink navy, one signal red.
 const MONO = "font-['IBM_Plex_Mono',ui-monospace,monospace]";
@@ -168,7 +167,7 @@ export default function NewReportPage() {
           <p className="mt-2 max-w-xl text-sm text-white/65">Rota, mola planı ve yol uyarıları yaklaşık bir dakikada hazırlanır.</p>
           <div role="radiogroup" aria-label="Operasyon" className="mt-6 grid w-full grid-cols-2 gap-1 rounded-lg bg-white/10 p-1 sm:inline-grid sm:w-auto">
             {[
-              { total: true, title: "Total FTL", sub: "Menemen terminalinden" },
+              { total: true, title: "Total FTL", sub: "Menemen fabrikasından" },
               { total: false, title: "Genel", sub: "Başlangıcı sen seç" }
             ].map(option => {
               const active = fromTotalTerminal === option.total;
@@ -200,7 +199,7 @@ export default function NewReportPage() {
               </h2>
               <p className="mt-3 border-l-2 border-amber-400 pl-3 text-xs leading-5 text-slate-600">
                 {fromTotalTerminal
-                  ? "Çıkış Total Menemen terminalinin koordinatıdır. Varış ve ara durak için il/ilçe merkez koordinatı kullanılır; bayi giriş noktası seçilmediği için varış tarafı yaklaşık kalır."
+                  ? "Çıkış TotalEnergies Menemen Madeni Yağ Fabrikası'nın koordinatıdır. Varış ve ara durak için il/ilçe merkez koordinatı kullanılır; bayi giriş noktası seçilmediği için varış tarafı yaklaşık kalır."
                   : "İl ve ilçe seçimi merkez koordinatlarını kullanır. Gerçek tesis giriş noktası seçilmediği için mesafe, harita ve mola konumları yaklaşık kalır."}
               </p>
 
@@ -210,8 +209,8 @@ export default function NewReportPage() {
                     <span className={labelClass}>Çıkış</span>
                     <div className="flex min-h-11 items-center gap-3 rounded-md border border-[#14213D]/10 bg-[#F4F2EE] px-3">
                       <span className="h-2.5 w-2.5 shrink-0 rounded-full border-2 border-[#14213D]" aria-hidden />
-                      <span className="font-medium text-[#14213D]">Total Menemen terminali</span>
-                      <span className={`${MONO} ml-auto hidden text-xs text-slate-400 sm:inline`}>38.6266, 27.0559</span>
+                      <span className="font-medium text-[#14213D]">{TOTAL_MENEMEN.name}</span>
+                      <span className={`${MONO} ml-auto hidden text-xs text-slate-400 sm:inline`}>{TOTAL_MENEMEN.lat.toFixed(4)}, {TOTAL_MENEMEN.lng.toFixed(4)}</span>
                     </div>
                   </div>
                 ) : (

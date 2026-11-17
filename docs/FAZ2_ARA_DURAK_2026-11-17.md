@@ -3,7 +3,7 @@
 Durum: yerel dal `faz0/olcum-altyapisi`, **commit/push yok**.
 
 ## Yeni rapor ekranı
-- **Çıkış: Total Menemen terminali** (varsayılan işaretli) → 38.6266439, 27.0558707 (Total lokasyon listesindeki "TOTAL CONTAINER FTL"). İşaret kaldırılırsa eski il/ilçe seçimi gelir.
+- **Çıkış: Total Menemen terminali** (varsayılan işaretli) → 38.617667, 27.122294 (TotalEnergies Menemen Madeni Yağ Fabrikası, Google Haritalar ile doğrulandı; 17 Kasım'a kadar Total listesindeki isimsiz 38.6266, 27.0559 noktası kullanılıyordu). İşaret kaldırılırsa eski il/ilçe seçimi gelir.
 - **Ara durak ili / ilçesi** (isteğe bağlı): yalnızca güzergâhı belirler, yükleme/boşaltma değildir. Google Routes'a `via: true` geçiş noktası olarak gider.
 - **Sürücünün bu hafta 10 sa uzatma hakkı var** (varsayılan işaretli). Kaldırılırsa plan 9 saatlik günle yapılır.
 

@@ -148,7 +148,7 @@ export default function BatchUploadPage() {
           <p className="mt-2 max-w-2xl text-sm text-white/65">CSV ile en fazla 20 sefer kuyruğa alınır. Kuyruk oluşturmak ücretli çağrı başlatmaz; her satır &quot;Sonraki satırı işle&quot; ile tek tek çalışır ve ardından inceleme için durur.</p>
           <div role="radiogroup" aria-label="Operasyon" className="mt-6 grid w-full grid-cols-2 gap-1 rounded-lg bg-white/10 p-1 sm:inline-grid sm:w-auto">
             {([
-              { key: "total", title: "Total FTL", sub: "Menemen terminalinden" },
+              { key: "total", title: "Total FTL", sub: "Menemen fabrikasından" },
               { key: "genel", title: "Genel", sub: "Çıkış CSV'de" }
             ] as const).map(option => {
               const on = operation === option.key;
@@ -173,7 +173,7 @@ export default function BatchUploadPage() {
           </div>
           <p className="mt-3 border-l-2 border-amber-400 pl-3 text-xs leading-5 text-slate-600">
             {operation === "total"
-              ? <>Çıkış her satırda <strong className="text-[#14213D]">Total Menemen terminali</strong>. </>
+              ? <>Çıkış her satırda <strong className="text-[#14213D]">TotalEnergies Menemen Madeni Yağ Fabrikası</strong>. </>
               : <>Çıkış her satırda CSV&apos;den okunur (il/ilçe merkezi). </>}
             Sütunlar: <span className={`${MONO} text-[#14213D]`}>{columns}</span>. Ara durak ve ilçeler isteğe bağlı; başlık satırı olabilir, virgül veya noktalı virgül kabul edilir.
           </p>

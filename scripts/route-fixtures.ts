@@ -14,7 +14,9 @@ export interface RouteFixtureSpec {
   via?: { name: string; coords: string };
 }
 
-export const TOTAL_MENEMEN = '38.6266439,27.0558707';
+// New captures start at the verified plant; files recorded before 17 Nov 2026 keep their own origin in `spec`.
+import { TOTAL_MENEMEN_COORDS } from '../lib/totalOperation';
+export const TOTAL_MENEMEN = TOTAL_MENEMEN_COORDS;
 
 export const ROUTE_FIXTURES: RouteFixtureSpec[] = [
   { id: 'menemen-eskisehir', label: 'Menemen → Eskişehir (Ford Otomotiv Tepebaşı)', origin: TOTAL_MENEMEN, destination: '39.873146,30.5739579' },

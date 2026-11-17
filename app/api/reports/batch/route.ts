@@ -4,6 +4,7 @@ import { requireAuth } from "@/lib/auth";
 import { batchLocationErrors } from "@/lib/batchLocations";
 import { parseBatchCsv } from "@/lib/csv";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
+import { TOTAL_MENEMEN } from "@/lib/totalOperation";
 
 const DEFAULT_MODEL = "gemini-3.7-flash";
 const ADMIN_MODELS = new Set(["gemini-2.5-flash", "gemini-3.8-flash"]);
@@ -11,8 +12,7 @@ const MAX_ROWS = 20;
 
 type BatchRequest = { csv: string; fileName?: string; useTolls?: boolean; departureTime?: string | null; model?: string; operation?: "total" | "genel"; driverHasExtension?: boolean };
 
-// Total İzmir FTL loading point (TOTAL CONTAINER FTL / Total Turkey Pazarlama, Menemen).
-const TOTAL_MENEMEN = { city: "izmir", county: "menemen", lat: 38.6266439, lng: 27.0558707 };
+
 
 const getProfile = async (userId: string, email?: string) => {
   const supabase = getSupabaseAdmin();

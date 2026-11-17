@@ -11,9 +11,10 @@ import { RouteTimeline } from "@/components/RouteTimeline";
 import { ReportSources } from "@/components/ReportSources";
 import type { RouteAnalysis } from "@/types";
 import type { BreakPlanAudit } from "@/lib/breakPlanAudit";
+import { TOTAL_MENEMEN, TOTAL_MENEMEN_COORDS } from "@/lib/totalOperation";
 
 // Total İzmir benchmark routes (dealer coordinates from Total's location list).
-const MENEMEN = { name: "İzmir, Menemen (Total)", coords: "38.6266439,27.0558707" };
+const MENEMEN = { name: TOTAL_MENEMEN.name, coords: TOTAL_MENEMEN_COORDS };
 const PRESETS = [
   { label: "Eskişehir — Ford Otomotiv Tepebaşı", name: "Eskişehir, Tepebaşı", coords: "39.873146,30.5739579" },
   { label: "Ankara — ABC Grup Yenimahalle", name: "Ankara, Yenimahalle", coords: "39.9484369,32.7122122" },
