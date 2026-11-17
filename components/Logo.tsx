@@ -1,0 +1,21 @@
+/**
+ * AI JMP mark: an "A" whose right leg is a road, from the origin pin (paper) to the
+ * destination pin (signal red). Colours follow the dashboard palette.
+ */
+export const LOGO_SVG_BODY = `
+  <rect width="64" height="64" rx="14" fill="#14213D"/>
+  <path d="M15 52 L30 13" stroke="#FFFFFF" stroke-width="7" stroke-linecap="round" fill="none"/>
+  <path d="M30 13 C 36 22, 32 33, 39 41 S 49 50, 51 53" stroke="#F4F2EE" stroke-width="10" stroke-linecap="round" fill="none"/>
+  <path d="M30 13 C 36 22, 32 33, 39 41 S 49 50, 51 53" stroke="#14213D" stroke-width="1.6" stroke-dasharray="3.2 3.2" stroke-linecap="round" fill="none"/>
+  <path d="M21 37 L34 37" stroke="#FFFFFF" stroke-width="5" stroke-linecap="round"/>
+  <path d="M47 23.5 C 45.8 20.6, 41.5 17.6, 41.5 13.5 A 5.5 5.5 0 1 1 52.5 13.5 C 52.5 17.6, 48.2 20.6, 47 23.5 Z" fill="#D7192D" stroke="#14213D" stroke-width="1.5"/>
+  <circle cx="47" cy="13.5" r="2.1" fill="#14213D"/>
+  <path d="M14 56 C 12.9 53.4, 9 50.7, 9 47 A 5 5 0 1 1 19 47 C 19 50.7, 15.1 53.4, 14 56 Z" fill="#F4F2EE" stroke="#14213D" stroke-width="1.5"/>
+  <circle cx="14" cy="47" r="1.9" fill="#14213D"/>
+`;
+
+export function Logo({ className = "h-8 w-8" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 64 64" className={className} role="img" aria-label="AI JMP" dangerouslySetInnerHTML={{ __html: LOGO_SVG_BODY }} />
+  );
+}

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { getSupabaseBrowserClient } from "@/lib/supabaseClient";
 import { LogOut, User, Menu, Settings } from "lucide-react";
+import { Logo } from "@/components/Logo";
 
 export default function Header() {
     const [userEmail, setUserEmail] = useState<string | null>(null);
@@ -43,9 +44,7 @@ export default function Header() {
             <div className="flex h-16 items-center justify-between px-6 max-w-[1400px] mx-auto">
                 <div className="flex items-center gap-8">
                     <Link href="/dashboard" className="flex items-center gap-2 font-bold text-xl text-gray-900">
-                        <div className="h-8 w-8 bg-[#14213D] rounded-md flex items-center justify-center text-white font-bold">
-                            J
-                        </div>
+                        <Logo className="h-9 w-9" />
                         <span>AI JMP</span>
                     </Link>
                     <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-gray-600">
